@@ -313,6 +313,9 @@ with tab1:
 # ------------------------------------------------------------------------------
 # TAB 2: DAILY GPS & EXTREME MONITORING
 # ------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+# TAB 2: DAILY GPS & EXTREME MONITORING
+# ------------------------------------------------------------------------------
 with tab2:
     st.header(f"🎯 Daily GPS & Live Extreme Status Ledger — {selected_symbol}")
     st.caption("Updated nightly at 22:00 CEST sharp using live telemetry.")
@@ -343,32 +346,56 @@ with tab2:
     st.markdown("---")
     st.subheader("🟢 Traffic Light Monitoring System")
 
+    # Adaptive Structural Turn Detection Helper
+    def check_structural_extreme(
+        current_low, current_high, target_e1, target_e2, close_p
+    ):
+        # E1 Structural Confirmation: Session low hit within buffer zone & price holding above
+        e1_confirmed = (current_low <= target_e1) or (
+            abs(current_low - target_e1) <= 0.0015 and close_p > current_low
+        )
+
+        # E2 Structural Confirmation: Session high hit within buffer zone & price expansion verified
+        e2_confirmed = (current_high >= target_e2) or (
+            abs(current_high - target_e2) <= 0.0015 and close_p < current_high
+        )
+
+        return e1_confirmed, e2_confirmed
+
+    e1_printed, e2_printed = check_structural_extreme(
+        telemetry["low"],
+        telemetry["high"],
+        e1_target,
+        e2_target,
+        telemetry["close"],
+    )
+
     col_t1, col_t2 = st.columns(2)
 
     with col_t1:
         st.markdown("### First Extreme ($E_1$) Tracking")
-        if telemetry["low"] <= e1_target:
+        if e1_printed:
             st.success(
-                "🟢 **PRINTED**: First Extreme detected & confirmed at target boundary!"
+                f"🟢 **PRINTED**: $E_1$ structural turn confirmed at `{telemetry['low']:.4f}`! Target coordinates active."
             )
-        elif telemetry["close"] < e1_target + 0.0015:
+        elif abs(telemetry["close"] - e1_target) <= 0.0025:
             st.warning(
-                "🟡 **DELAY**: Target window active. Standby for 30m confirmation."
+                "🟡 **DELAY**: Target window active. Standby for 30m structural confirmation."
             )
         else:
             st.error(
-                "🔴 **TOXIC ENVIRONMENT**: Severe deviation detected. NO TRADES AUTHORIZED."
+                "🔴 **TOXIC ENVIRONMENT**: Severe structural deviation detected. NO TRADES AUTHORIZED."
             )
 
     with col_t2:
         st.markdown("### Second Extreme ($E_2$) Tracking")
-        if telemetry["high"] >= e2_target:
+        if e2_printed:
             st.success(
-                "🟢 **PRINTED**: Second Extreme detected & confirmed at target boundary!"
+                f"🟢 **PRINTED**: $E_2$ structural expansion confirmed at `{telemetry['high']:.4f}`!"
             )
-        elif telemetry["close"] > e2_target - 0.0015:
+        elif abs(telemetry["close"] - e2_target) <= 0.0025:
             st.warning(
-                "🟡 **DELAY**: Target window active. Standby for 30m confirmation."
+                "🟡 **DELAY**: Target window active. Standby for 30m structural confirmation."
             )
         else:
             st.error(
