@@ -40,6 +40,7 @@ def fetch_twelve_data_quote(symbol="EUR/USD"):
         res = requests.get(url, timeout=10).json()
         if "close" in res:
             return {
+                "symbol": res.get("symbol", symbol),
                 "close": float(res["close"]),
                 "high": float(res["high"]),
                 "low": float(res["low"]),
@@ -49,12 +50,16 @@ def fetch_twelve_data_quote(symbol="EUR/USD"):
             }
     except Exception:
         pass
+
+    # Dynamic Fallback Values depending on symbol
+    fallback_close = 1.2650 if symbol == "GBP/USD" else 1.0850
     return {
-        "close": 1.0850,
-        "high": 1.0890,
-        "low": 1.0810,
-        "open": 1.0825,
-        "previous_close": 1.0830,
+        "symbol": symbol,
+        "close": fallback_close,
+        "high": fallback_close + 0.0040,
+        "low": fallback_close - 0.0040,
+        "open": fallback_close - 0.0025,
+        "previous_close": fallback_close - 0.0020,
         "status": "FALLBACK MODE",
     }
 
@@ -203,7 +208,10 @@ def run_reconciliation(telemetry):
 
 # Sidebar Configuration
 st.sidebar.title("🕹️ TITAN Control Panel")
-selected_symbol = st.sidebar.selectbox("Active Asset", ["EUR/USD", "GBP/USD"])
+
+# ACTIVE ASSET SELECTOR: Includes both EUR/USD and GBP/USD
+selected_symbol = st.sidebar.selectbox("Active Asset Pair", ["EUR/USD", "GBP/USD"])
+
 spain_time = datetime.utcnow() + timedelta(hours=2)
 st.sidebar.markdown(
     f"**System Time (Spain):**\n`{spain_time.strftime('%Y-%m-%d %H:%M:%S CEST')}`"
@@ -217,6 +225,7 @@ if auto_refresh:
         "🔄 System checks printed status every 30m after extreme targets."
     )
 
+# Fetch Live Telemetry for the Selected Pair
 telemetry = fetch_twelve_data_quote(selected_symbol)
 rec_results = run_reconciliation(telemetry)
 
@@ -228,7 +237,7 @@ st.caption(
 
 # KPI Cards
 kpi1, kpi2, kpi3, kpi4 = st.columns(4)
-kpi1.metric("Live Price", f"{telemetry['close']:.4f}")
+kpi1.metric(f"Live Price ({selected_symbol})", f"{telemetry['close']:.4f}")
 kpi2.metric("DNA Class", rec_results["dna_class"])
 kpi3.metric(
     "Directional Override",
@@ -252,19 +261,22 @@ tab1, tab2, tab3, tab4 = st.tabs(
 # TAB 1: WEEKLY PROJECTIONS (Sunday Update Locked)
 # ------------------------------------------------------------------------------
 with tab1:
-    st.header("🗓️ Weekly Baseline Model (Sunday Lockdown)")
+    st.header(f"🗓️ Weekly Baseline Model — {selected_symbol}")
     st.info(
         "This projection updates every Sunday at 23:59 CEST and anchors structural drift calculations."
     )
 
     col_w1, col_w2 = st.columns([1, 2])
 
+    # Dynamic target multiplier based on instrument ATR
+    pip_factor = 0.0120 if selected_symbol == "GBP/USD" else 0.0080
+
     with col_w1:
         st.subheader("Weekly Vector Summary")
         st.write(f"**Symbol:** {selected_symbol}")
         st.write(f"**DNA Class Projection:** {rec_results['dna_class']}")
         st.write("**Sequence Projection:** $E_1 \\rightarrow M \\rightarrow E_2$")
-        st.write("**Expected Weekly Close:** 1.0890")
+        st.write(f"**Expected Weekly Close:** {telemetry['close'] + (pip_factor * 0.75):.4f}")
 
     with col_w2:
         st.subheader("Weekly Target GPS Coordinates")
@@ -277,10 +289,10 @@ with tab1:
                     "Predicted Close",
                 ],
                 "Price Target": [
-                    f"{telemetry['close'] + 0.0080:.4f}",
-                    f"{telemetry['close'] - 0.0050:.4f}",
-                    f"{telemetry['close'] + 0.0015:.4f}",
-                    f"{telemetry['close'] + 0.0060:.4f}",
+                    f"{telemetry['close'] + pip_factor:.4f}",
+                    f"{telemetry['close'] - (pip_factor * 0.6):.4f}",
+                    f"{telemetry['close'] + (pip_factor * 0.2):.4f}",
+                    f"{telemetry['close'] + (pip_factor * 0.75):.4f}",
                 ],
                 "Target Day": [
                     "Thursday",
@@ -302,20 +314,22 @@ with tab1:
 # TAB 2: DAILY GPS & EXTREME MONITORING
 # ------------------------------------------------------------------------------
 with tab2:
-    st.header("🎯 Daily GPS & Live Extreme Status Ledger")
+    st.header(f"🎯 Daily GPS & Live Extreme Status Ledger — {selected_symbol}")
     st.caption("Updated nightly at 22:00 CEST sharp using live telemetry.")
 
     # Day selector
     days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
     selected_day = st.selectbox("Select Execution Day", days, index=0)
 
-    # Compute daily boundaries
+    # Compute daily boundaries dynamically per asset
     base_price = telemetry["close"]
-    e1_target = round(base_price - 0.0035, 4)
-    e2_target = round(base_price + 0.0045, 4)
+    daily_pip = 0.0050 if selected_symbol == "GBP/USD" else 0.0035
+
+    e1_target = round(base_price - daily_pip, 4)
+    e2_target = round(base_price + (daily_pip * 1.3), 4)
     mid_target = round((e1_target + e2_target) / 2, 4)
 
-    st.subheader(f"📍 GPS Map — {selected_day}")
+    st.subheader(f"📍 GPS Map — {selected_day} ({selected_symbol})")
     col_d1, col_d2, col_d3, col_d4 = st.columns(4)
     col_d1.metric("1st Extreme (E1)", f"{e1_target:.4f}", "Time: 08:30 CEST")
     col_d2.metric("Midpoint Anchor (M)", f"{mid_target:.4f}", "Time: 12:00 CEST")
@@ -329,12 +343,10 @@ with tab2:
     st.markdown("---")
     st.subheader("🟢 Traffic Light Monitoring System")
 
-    # Real-Time Extreme Status Logic
     col_t1, col_t2 = st.columns(2)
 
     with col_t1:
         st.markdown("### First Extreme ($E_1$) Tracking")
-        # Check printed logic against live telemetry
         if telemetry["low"] <= e1_target:
             st.success(
                 "🟢 **PRINTED**: First Extreme detected & confirmed at target boundary!"
@@ -367,7 +379,7 @@ with tab2:
 # TAB 3: ENGINE CALCULATIONS & WEIGHTS
 # ------------------------------------------------------------------------------
 with tab3:
-    st.header("⚙️ Math Engine Matrix & Fusion Weights")
+    st.header(f"⚙️ Math Engine Matrix & Fusion Weights — {selected_symbol}")
 
     col_e1, col_e2 = st.columns([2, 1])
 
@@ -391,8 +403,8 @@ with tab4:
     st.header("📋 Operator Execution Protocol & Invalidation Suite")
     st.warning("⚠️ Strictly follow time and action protocols. Do not front-run window triggers.")
 
-    st.markdown("""
-    ### 🟢 Authorized Action Protocols
+    st.markdown(f"""
+    ### 🟢 Authorized Action Protocols ({selected_symbol})
     1. **08:00 - 08:30 CEST (Phase AL - First Extreme Window)**:
        * Observe price relative to $E_1$ target boundary (`{e1_target:.4f}`).
        * **IF** Traffic Light turns 🟢 **PRINTED**, wait for a 5-minute bullish structural confirmation candle.
@@ -410,7 +422,7 @@ with tab4:
 
     ### 🔴 Mandatory Invalidation Rules (What NOT to do)
     * 🚫 **DO NOT TRADE** if Traffic Light displays 🔴 **TOXIC ENVIRONMENT**.
-    * 🚫 **DO NOT ENTER** prior to 08:30 CEST regardless of how attractive price looks.
-    * 🚫 **INVALIDATION**: If price breaches $E_1$ by more than 12 pips prior to confirmation, cancel all buy-limit orders immediately. Structural drift is compromised.
+    * 🚫 **DO NOT ENTER** prior to 08:30 CEST regardless of price level.
+    * 🚫 **INVALIDATION**: If price breaches $E_1$ by more than 12 pips prior to confirmation, cancel all orders immediately.
     * 🚫 **NO OVERNIGHT POSITIONS**: All trades must be liquidated by 21:30 CEST prior to the 22:00 nightly reconciliation update.
     """)
