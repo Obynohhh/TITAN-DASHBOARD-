@@ -739,3 +739,49 @@ else:  # RED LIGHT CONDITION
         </script>
     """
     st.components.v1.html(alert_html, height=0)
+    # --------------------------------------------------------------------------
+    # 3-SENTENCE TRADE OPERATIONAL NARRATIVE
+    # --------------------------------------------------------------------------
+    st.markdown("#### 📝 Trade Operational Narrative")
+    narrative_text = (
+        f"This trade is executing a **{trade_direction}** position anchored at Wednesday 09:00 CEST (`{w_price_0900_in:.4f}`) targeting weekly session expansion. "
+        f"The market structure is currently backed by **{gate_res['tier']}** telemetry, projecting a **{gate_res['win_pct']}** zero-hedge probability under normal volatility. "
+        f"We will reconsider and completely abort this trade if price falls below the Focus Price of <span style='color:red; font-weight:bold;'>{invalid_focus_price:.4f}</span> for BUY setups or pushes above <span style='color:red; font-weight:bold;'>{invalid_focus_price:.4f}</span> for SELL setups."
+    )
+    st.markdown(narrative_text, unsafe_allow_html=True)
+
+    st.markdown("---")
+    st.markdown("### 📊 Holy Hedge Matrix & Risk Parameters")
+
+    hm1, hm2, hm3, hm4 = st.columns(4)
+    hm1.metric("Qualified Trigger Tier", gate_res["tier"])
+    hm2.metric("Zero-Hedge Win %", gate_res["win_pct"])
+    hm3.metric("1st Hedge Trigger %", gate_res["h1_pct"])
+    hm4.metric("2nd Hedge Breach %", gate_res["h2_pct"])
+
+    st.markdown("#### 🛡️ Position Sizing & Hedge Boundaries")
+
+    col_r1, col_r2, col_r3, col_r4 = st.columns(4)
+    col_r1.metric("Primary Lot Size", f"{prim_lots_in:.2f} Lots")
+    col_r2.metric("1st Hedge Lot (1.5x)", f"{first_hedge_lot:.2f} Lots")
+    col_r3.metric(
+        "Hedge Trigger Price",
+        f"{gate_res['hedge_trigger']:.4f}",
+        f"{gate_res['buffer_pips']:.1f} pips buffer",
+    )
+    col_r4.metric(
+        "Hard Stop Price (Breach 2)",
+        f"{hard_stop_price:.4f}",
+        "Max Loss Capped",
+    )
+
+    # Red Highlight Focus Price Alert Box (Correct parameter: unsafe_allow_html)
+    st.markdown(
+        f"""
+        <div style="background-color:#3a0000; padding:15px; border-radius:10px; border:2px solid red; text-align:center;">
+            <h3 style="color:red; margin:0;">⚠️ CRITICAL FOCUS PRICE NODE: <span style="font-size:28px;">{invalid_focus_price:.4f}</span></h3>
+            <p style="color:white; margin:5px 0 0 0;">If price is {'below' if trade_direction == 'BUY' else 'above'} this level at Wednesday 09:10 CEST, DO NOT ENTER or EXIT IMMEDIATELY.</p>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
