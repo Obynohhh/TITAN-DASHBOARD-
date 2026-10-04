@@ -636,7 +636,7 @@ with st.container(border=True):
         f"The market structure is currently backed by **{tier}** telemetry, projecting a **{win_pct}** zero-hedge probability under normal volatility. "
         f"We will reconsider and completely abort this trade if price falls below the Focus Price of <span style='color:red; font-weight:bold;'>{invalid_focus_price:.4f}</span> for BUY setups or pushes above <span style='color:red; font-weight:bold;'>{invalid_focus_price:.4f}</span> for SELL setups.",
     )
-    st.markdown(narrative_text[0], unsafe_allow_text=True)
+    st.markdown(narrative_text, unsafe_allow_html=True)
 
     st.markdown("---")
     st.markdown("### 📊 Holy Hedge Matrix & Risk Parameters")
