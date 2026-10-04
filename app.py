@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 import math
+import base64
 import numpy as np
 import pandas as pd
 import requests
@@ -313,9 +314,6 @@ with tab1:
 # ------------------------------------------------------------------------------
 # TAB 2: DAILY GPS & EXTREME MONITORING
 # ------------------------------------------------------------------------------
-# ------------------------------------------------------------------------------
-# TAB 2: DAILY GPS & EXTREME MONITORING
-# ------------------------------------------------------------------------------
 with tab2:
     st.header(f"🎯 Daily GPS & Live Extreme Status Ledger — {selected_symbol}")
     st.caption("Updated nightly at 22:00 CEST sharp using live telemetry.")
@@ -350,16 +348,12 @@ with tab2:
     def check_structural_extreme(
         current_low, current_high, target_e1, target_e2, close_p
     ):
-        # E1 Structural Confirmation: Session low hit within buffer zone & price holding above
         e1_confirmed = (current_low <= target_e1) or (
             abs(current_low - target_e1) <= 0.0015 and close_p > current_low
         )
-
-        # E2 Structural Confirmation: Session high hit within buffer zone & price expansion verified
         e2_confirmed = (current_high >= target_e2) or (
             abs(current_high - target_e2) <= 0.0015 and close_p < current_high
         )
-
         return e1_confirmed, e2_confirmed
 
     e1_printed, e2_printed = check_structural_extreme(
@@ -453,6 +447,7 @@ with tab4:
     * 🚫 **INVALIDATION**: If price breaches $E_1$ by more than 12 pips prior to confirmation, cancel all orders immediately.
     * 🚫 **NO OVERNIGHT POSITIONS**: All trades must be liquidated by 21:30 CEST prior to the 22:00 nightly reconciliation update.
     """)
+
 # ==============================================================================
 # TITAN V3.2: HOLY HEDGE EXECUTIVE ENGINE
 # ==============================================================================
@@ -468,9 +463,8 @@ with st.container(border=True):
     # --------------------------------------------------------------------------
     pip_scale = 0.0001 if "JPY" not in selected_symbol else 0.01
 
-    # Auto-fetch telemetry or user inputs
     cur_price = telemetry["close"]
-    daily_atr = telemetry.get("atr", 0.0070)  # Default Daily ATR
+    daily_atr = telemetry.get("atr", 0.0070)
 
     col_h_in1, col_h_in2, col_h_in3 = st.columns(3)
     with col_h_in1:
@@ -501,12 +495,12 @@ with st.container(border=True):
         d1 = (m_high - t_close) / pip_scale
         d2 = (m_high - w_price_0900) / pip_scale
         d3 = (t_close - w_price_0900) / pip_scale
-        invalid_focus_price = m_high - (0.0015)  # Sell Invalidation Threshold
+        invalid_focus_price = m_high - (0.0015)
     else:  # BUY
         d1 = (t_close - m_low) / pip_scale
         d2 = (w_price_0900 - m_low) / pip_scale
         d3 = (w_price_0900 - t_close) / pip_scale
-        invalid_focus_price = m_low + (0.0015)  # Buy Invalidation Threshold
+        invalid_focus_price = m_low + (0.0015)
 
     # --------------------------------------------------------------------------
     # MULTI-TIER PROBABILITY & HEDGE CALCULATION ENGINE
@@ -591,17 +585,16 @@ with st.container(border=True):
         hedge_price = m_low - buffer_pips
 
     first_hedge_lot = prim_lots * 1.5
-    hard_stop_price = t_close  # Breach 2 Re-cross Invalidation
+    hard_stop_price = t_close
 
     # --------------------------------------------------------------------------
     # LIVE TRAFFIC LIGHT MONITORING LOGIC
     # --------------------------------------------------------------------------
-    # Reconsideration Rule Check
     if direction == "BUY" and live_price <= invalid_focus_price:
         light_status = "RED"
     elif direction == "SELL" and live_price >= invalid_focus_price:
         light_status = "RED"
-    elif abs(live_price - w_price_0900) <= (0.0006):  # Pre-Market Straddle
+    elif abs(live_price - w_price_0900) <= (0.0006):
         light_status = "YELLOW"
     elif tier == "REJECTED (Toxic Trap)":
         light_status = "RED"
@@ -629,12 +622,28 @@ with st.container(border=True):
             "Price has violated the critical focus price node or entered a toxic Doji compression loop. Cancel all orders immediately."
         )
 
+        # Audio & Popup Alert Trigger for Red Light
+        audio_wav_b64 = (
+            "UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU"
+            + "UvT18A" * 120
+        )
+
+        alert_html = f"""
+            <audio autoplay style="display:none;">
+                <source src="data:audio/wav;base64,{audio_wav_b64}" type="audio/wav">
+            </audio>
+            <script>
+                alert("🚨 CRITICAL WARNING: HOLY HEDGE RED LIGHT TRIGGERED!\\n\\nFocus Price violated or toxic environment detected. EXIT ALL TRADES IMMEDIATELY!");
+            </script>
+        """
+        st.components.v1.html(alert_html, height=0)
+
     # 3-Sentence Trade Operational Narrative
     st.markdown("#### 📝 Trade Operational Narrative")
     narrative_text = (
         f"This trade is executing a **{direction}** position anchored at Wednesday 09:00 CEST (`{w_price_0900:.4f}`) targeting weekly session expansion. "
         f"The market structure is currently backed by **{tier}** telemetry, projecting a **{win_pct}** zero-hedge probability under normal volatility. "
-        f"We will reconsider and completely abort this trade if price falls below the Focus Price of <span style='color:red; font-weight:bold;'>{invalid_focus_price:.4f}</span> for BUY setups or pushes above <span style='color:red; font-weight:bold;'>{invalid_focus_price:.4f}</span> for SELL setups.",
+        f"We will reconsider and completely abort this trade if price falls below the Focus Price of <span style='color:red; font-weight:bold;'>{invalid_focus_price:.4f}</span> for BUY setups or pushes above <span style='color:red; font-weight:bold;'>{invalid_focus_price:.4f}</span> for SELL setups."
     )
     st.markdown(narrative_text, unsafe_allow_html=True)
 
@@ -663,125 +672,13 @@ with st.container(border=True):
         "Max Loss Capped",
     )
 
-    # Red Highlight Focus Price Alert
+    # Red Highlight Focus Price Alert Box
     st.markdown(
         f"""
         <div style="background-color:#3a0000; padding:15px; border-radius:10px; border:2px solid red; text-align:center;">
-            <h3 style="color:red; margin:0;">⚠️ CRITICAL FOCUS PRICE NODE: <span style="font-size:28px;">{invalid_focus_price:.4f}</span></h3>
+            <h3 style="color:red; margin:0;">⚠️️ CRITICAL FOCUS PRICE NODE: <span style="font-size:28px;">{invalid_focus_price:.4f}</span></h3>
             <p style="color:white; margin:5px 0 0 0;">If price is {'below' if direction == 'BUY' else 'above'} this level at Wednesday 09:10 CEST, DO NOT ENTER or EXIT IMMEDIATELY.</p>
         </div>
         """,
-        unsafe_allow_text=True,
-    )
-import base64
-import streamlit as st
-
-# --------------------------------------------------------------------------
-# LIVE TRAFFIC LIGHT MONITORING LOGIC
-# --------------------------------------------------------------------------
-# Reconsideration Rule Check
-if direction == "BUY" and live_price <= invalid_focus_price:
-    light_status = "RED"
-elif direction == "SELL" and live_price >= invalid_focus_price:
-    light_status = "RED"
-elif abs(live_price - w_price_0900) <= (0.0006):  # Pre-Market Straddle
-    light_status = "YELLOW"
-elif tier == "REJECTED (Toxic Trap)":
-    light_status = "RED"
-else:
-    light_status = "GREEN"
-
-# --------------------------------------------------------------------------
-# RENDER EXECUTIVE HOLY HEDGE DISPLAY WITH AUDIO & POPUP ALERTS
-# --------------------------------------------------------------------------
-st.markdown("### 🚦 Live Trade Execution Traffic Light")
-
-if light_status == "GREEN":
-    st.success(
-        f"🟢 **GREEN LIGHT — ALL SYSTEMS GO ({direction} AUTHORIZED)**\n\n"
-        f"The weekly directional vector is fully confirmed with strong momentum. "
-        f"Structural deltas align with **{tier}**."
-    )
-
-elif light_status == "YELLOW":
-    st.warning(
-        "🟡 **YELLOW LIGHT — CONCERNS ON TRADE (STANDBY)**\n\n"
-        "Price is balancing within ±6 pips of the entry vector. Structural consolidation active. "
-        "Hold execution until Phase AL confirms expansion."
-    )
-
-else:  # RED LIGHT CONDITION
-    st.error(
-        "🔴 **RED LIGHT — CONDITIONS CHANGED (GET OUT NOW / NO TRADE AUTHORIZED)**\n\n"
-        "Price has violated the critical focus price node or entered a toxic Doji compression loop. "
-        "Cancel all orders immediately."
-    )
-
-    # ----------------------------------------------------------------------
-    # AUDIO & POPUP ALERT TRIGGER (RED LIGHT ONLY)
-    # ----------------------------------------------------------------------
-    # Synthesized 880Hz alert tone (Base64 WAV)
-    audio_wav_b64 = (
-        "UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU"
-        + "UvT18A" * 120
-    )
-
-    alert_html = f"""
-        <!-- Audio Alert Trigger -->
-        <audio autoplay style="display:none;">
-            <source src="data:audio/wav;base64,{audio_wav_b64}" type="audio/wav">
-        </audio>
-
-        <!-- Browser Popup Alert Trigger -->
-        <script>
-            // Show browser alert popup
-            alert("🚨 CRITICAL WARNING: HOLY HEDGE RED LIGHT TRIGGERED!\\n\\nFocus Price violated or toxic environment detected. EXIT ALL TRADES IMMEDIATELY!");
-        </script>
-    """
-    st.components.v1.html(alert_html, height=0)
-    # --------------------------------------------------------------------------
-    # 3-SENTENCE TRADE OPERATIONAL NARRATIVE
-    # --------------------------------------------------------------------------
-    st.markdown("#### 📝 Trade Operational Narrative")
-    narrative_text = (
-        f"This trade is executing a **{trade_direction}** position anchored at Wednesday 09:00 CEST (`{w_price_0900_in:.4f}`) targeting weekly session expansion. "
-        f"The market structure is currently backed by **{gate_res['tier']}** telemetry, projecting a **{gate_res['win_pct']}** zero-hedge probability under normal volatility. "
-        f"We will reconsider and completely abort this trade if price falls below the Focus Price of <span style='color:red; font-weight:bold;'>{invalid_focus_price:.4f}</span> for BUY setups or pushes above <span style='color:red; font-weight:bold;'>{invalid_focus_price:.4f}</span> for SELL setups."
-    )
-    st.markdown(narrative_text, unsafe_allow_html=True)
-
-    st.markdown("---")
-    st.markdown("### 📊 Holy Hedge Matrix & Risk Parameters")
-
-    hm1, hm2, hm3, hm4 = st.columns(4)
-    hm1.metric("Qualified Trigger Tier", gate_res["tier"])
-    hm2.metric("Zero-Hedge Win %", gate_res["win_pct"])
-    hm3.metric("1st Hedge Trigger %", gate_res["h1_pct"])
-    hm4.metric("2nd Hedge Breach %", gate_res["h2_pct"])
-
-    st.markdown("#### 🛡️ Position Sizing & Hedge Boundaries")
-
-    col_r1, col_r2, col_r3, col_r4 = st.columns(4)
-    col_r1.metric("Primary Lot Size", f"{prim_lots_in:.2f} Lots")
-    col_r2.metric("1st Hedge Lot (1.5x)", f"{first_hedge_lot:.2f} Lots")
-    col_r3.metric(
-        "Hedge Trigger Price",
-        f"{gate_res['hedge_trigger']:.4f}",
-        f"{gate_res['buffer_pips']:.1f} pips buffer",
-    )
-    col_r4.metric(
-        "Hard Stop Price (Breach 2)",
-        f"{hard_stop_price:.4f}",
-        "Max Loss Capped",
-    )
-
-    # Red Highlight Focus Price Alert Box (Correct parameter: unsafe_allow_html)
-    st.markdown(
-        f"""
-        <div style="background-color:#3a0000; padding:15px; border-radius:10px; border:2px solid red; text-align:center;">
-            <h3 style="color:red; margin:0;">⚠️ CRITICAL FOCUS PRICE NODE: <span style="font-size:28px;">{invalid_focus_price:.4f}</span></h3>
-            <p style="color:white; margin:5px 0 0 0;">If price is {'below' if trade_direction == 'BUY' else 'above'} this level at Wednesday 09:10 CEST, DO NOT ENTER or EXIT IMMEDIATELY.</p>
-        </div>
-        """,
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
