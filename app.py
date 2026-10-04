@@ -676,7 +676,7 @@ with st.container(border=True):
     st.markdown(
         f"""
         <div style="background-color:#3a0000; padding:15px; border-radius:10px; border:2px solid red; text-align:center;">
-            <h3 style="color:red; margin:0;">⚠️️ CRITICAL FOCUS PRICE NODE: <span style="font-size:28px;">{invalid_focus_price:.4f}</span></h3>
+            <h3 style="color:red; margin:0;">⚠️ CRITICAL FOCUS PRICE NODE: <span style="font-size:28px;">{invalid_focus_price:.4f}</span></h3>
             <p style="color:white; margin:5px 0 0 0;">If price is {'below' if direction == 'BUY' else 'above'} this level at Wednesday 09:10 CEST, DO NOT ENTER or EXIT IMMEDIATELY.</p>
         </div>
         """,
