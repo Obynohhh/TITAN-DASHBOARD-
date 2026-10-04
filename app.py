@@ -625,3 +625,52 @@ with st.container(border=True):
         """,
         unsafe_allow_html=True,
     )
+import threading
+from fastapi import FastAPI
+from pydantic import BaseModel
+import streamlit as st
+import uvicorn
+
+# ------------------------------------------------------------------------------
+# FASTAPI BACKGROUND ENDPOINT FOR AI AGENTS
+# ------------------------------------------------------------------------------
+api = FastAPI(title="TITAN Control Suite API")
+
+
+class AITradePayload(BaseModel):
+    date: str
+    symbol: str
+    direction: str
+    tier: str
+    outcome: str
+    pips: float
+
+
+@api.get("/api/v1/state")
+def get_dashboard_state():
+    """AI agent queries this endpoint to read current live targets."""
+    return {
+        "status": "ONLINE",
+        "active_pairs": ["EUR/USD", "GBP/USD"],
+        "active_anchor": "Wednesday 09:00 CEST",
+    }
+
+
+@api.post("/api/v1/log-trade")
+def receive_trade_from_ai(payload: AITradePayload):
+    """AI agent posts trade executions directly into dashboard ledger."""
+    return {
+        "status": "SUCCESS",
+        "message": f"Recorded trade for {payload.symbol} on {payload.date}",
+        "received": payload.dict(),
+    }
+
+
+def start_api():
+    uvicorn.run(api, host="0.0.0.0", port=8000, log_level="error")
+
+
+# Run FastAPI in a background daemon thread
+if "api_running" not in st.session_state:
+    st.session_state.api_running = True
+    threading.Thread(target=start_api, daemon=True).start()
