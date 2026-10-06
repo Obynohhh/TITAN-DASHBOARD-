@@ -77,22 +77,24 @@ if "compliance_ledger" not in st.session_state:
 @st.cache_data(ttl=15)
 def fetch_twelve_data_quote(symbol="EUR/USD"):
     url = f"https://api.twelvedata.com/quote?symbol={symbol}&apikey={API_KEY}"
+    fallback_close = 1.3241 if symbol == "GBP/USD" else 1.1258
+
     try:
         res = requests.get(url, timeout=10).json()
-        if "close" in res:
+        if isinstance(res, dict) and "close" in res and res["close"] is not None:
             return {
                 "symbol": res.get("symbol", symbol),
                 "close": float(res["close"]),
                 "high": float(res["high"]),
                 "low": float(res["low"]),
                 "open": float(res["open"]),
-                "previous_close": float(res["previous_close"]),
+                "previous_close": float(res.get("previous_close", res["close"])),
                 "status": "ONLINE",
             }
     except Exception:
         pass
 
-    fallback_close = 1.2650 if symbol == "GBP/USD" else 1.0850
+    # Safe Fallback Dictionary (Prevents NoneType errors)
     return {
         "symbol": symbol,
         "close": fallback_close,
@@ -102,6 +104,7 @@ def fetch_twelve_data_quote(symbol="EUR/USD"):
         "previous_close": fallback_close - 0.0020,
         "status": "FALLBACK MODE",
     }
+
 
 # ==============================================================================
 # 2. LIVE TELEMETRY INGESTION (TWELVE DATA API)
