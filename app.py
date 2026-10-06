@@ -104,18 +104,6 @@ def fetch_twelve_data_quote(symbol="EUR/USD"):
         "previous_close": fallback_close - 0.0020,
         "status": "FALLBACK MODE",
     }
-
-
-# ==============================================================================
-# 2. LIVE TELEMETRY INGESTION (TWELVE DATA API)
-# ==============================================================================
-@st.cache_data(ttl=15)
-def fetch_twelve_data_quote(symbol="EUR/USD"):
-    # ... (Keep your existing function code here) ...
-    pass
-
-
-# ---> PASTE ENGINE 7 FRED/BUNDESBANK CODE HERE <---
 FRED_API_KEY = "9019cc44224ad07f6af165b8710dbafd"
 
 
@@ -166,6 +154,7 @@ def fetch_titan_sovereign_spread():
             "C_SYG": 1,
             "status": f"OFFLINE_FALLBACK ({e})",
         }
+
 
 # ==============================================================================
 # 3. PERMANENT MATHEMATICAL ENGINE IMPLEMENTATIONS
