@@ -631,26 +631,54 @@ with tab2:
         st.markdown("### Second Extreme ($E_2$) Tracking")
         if e2_printed:
             st.success(f"🟢 **PRINTED**: $E_2$ confirmed at `{telemetry['high']:.4f}`!")
-        else:
-            st.warning("🟡 **STANDBY**: Target window active.")
+                else:
+            st.warning("🟠 **STANDBY**: Target window active.")
+
+        # --- PUSHOVER SMARTWATCH ALERTS TRIGGER ---
+        if e2_printed and not st.session_state.get("e2_alert_sent"):
+            send_pushover_watch_alert(
+                title="🔴 E2 PRINTED - TITAN ALERT",
+                message=f"{selected_symbol} reached Second Extreme ({spain_time.strftime('%H:%M CEST')})",
+            )
+            st.session_state["e2_alert_sent"] = True
+
+
+# ==============================================================================
+# PUSHOVER SMARTWATCH ALERT ENGINE
+# ==============================================================================
+def send_pushover_watch_alert(title, message):
+    """Pushes high-priority execution alerts directly to smartwatch face."""
+    user_key = st.secrets.get(
+        "PUSHOVER_USER_KEY", "u23ge8dqk2f1dta1ncae7pnndjasbp"
+    )
+    api_token = st.secrets.get(
+        "PUSHOVER_API_TOKEN", "aibc19ze8exniszsg7ojbqzpsq6ab1"
+    )
+
+    if not api_token or not user_key:
+        return
+
+    payload = {
+        "token": api_token,
+        "user": user_key,
+        "title": title,
+        "message": message,
+        "priority": 1,  # Bypasses quiet hours on smartwatch
+        "sound": "alarm",
+    }
+
+    try:
+        requests.post(
+            "https://api.pushover.net/1/messages.json", data=payload, timeout=5
+        )
+    except Exception as e:
+        print(f"Pushover watch alert failed: {e}")
+
 
 # ------------------------------------------------------------------------------
 # TAB 3: ENGINE CALCULATIONS & WEIGHTS
 # ------------------------------------------------------------------------------
-with tab3:
-    st.header(f"⚙️ Math Engine Matrix & Fusion Weights — {selected_symbol}")
-    col_e1, col_e2 = st.columns([2, 1])
-    with col_e1:
-        weights_df = pd.DataFrame(
-            list(rec_results["weights"].items()),
-            columns=["Engine", "Normalized Weight"],
-        )
-        st.bar_chart(weights_df.set_index("Engine"))
-    with col_e2:
-        for eng, val in rec_results["raw_conf"].items():
-            st.write(f"**{eng}:** `{val:.4f}`")
 
-# ------------------------------------------------------------------------------
 # TAB 4: OPERATOR PROTOCOL
 # ------------------------------------------------------------------------------
 with tab4:
