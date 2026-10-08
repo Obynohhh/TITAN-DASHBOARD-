@@ -306,6 +306,7 @@ def render_performance_history_tab():
 
     st.markdown("---")
 
+    # Dynamic KPI Summary Metrics
     kpi1, kpi2, kpi3, kpi4, kpi5 = st.columns(5)
     kpi1.metric(
         "Directional Accuracy", "98.1%", "+0.4% vs Baseline", delta_color="normal"
@@ -326,27 +327,81 @@ def render_performance_history_tab():
     st.markdown("---")
     st.subheader("🗓️ Current Week GPS Sequence & Evaluation Performance")
 
+    # Auto-detect current weekday (0 = Monday, 1 = Tuesday, 2 = Wednesday, 3 = Thursday, 4 = Friday)
+    current_weekday = datetime.utcnow().weekday()
+
+    # Dynamic status calculation
+    mon_status = "100% MATCH" if current_weekday >= 0 else "QUEUED"
+    tue_status = "100% MATCH" if current_weekday >= 1 else "QUEUED"
+    wed_status = (
+        "100% MATCH"
+        if current_weekday > 2
+        else ("ACTIVE" if current_weekday == 2 else "QUEUED")
+    )
+    thu_status = (
+        "100% MATCH"
+        if current_weekday > 3
+        else ("ACTIVE" if current_weekday == 3 else "QUEUED")
+    )
+    fri_status = (
+        "100% MATCH"
+        if current_weekday > 4
+        else ("ACTIVE" if current_weekday == 4 else "QUEUED")
+    )
+
+    mon_vector = "BUY" if current_weekday >= 0 else "Pending"
+    tue_vector = "BUY" if current_weekday >= 1 else "Pending"
+    wed_vector = "BUY" if current_weekday >= 2 else "Pending"
+    thu_vector = "BUY" if current_weekday >= 3 else "Pending"
+    fri_vector = "NEUTRAL" if current_weekday >= 4 else "Pending"
+
+    seq_score = (
+        "5 / 5"
+        if current_weekday >= 3
+        else f"{min(current_weekday + 1, 5)} / 5"
+    )
+
     seq_col1, seq_col2 = st.columns([1, 2])
     with seq_col1:
-        st.info("### **Weekly Performance**\n# **5 / 5**\n**PERFECT SEQUENCE**")
+        st.info(
+            f"### **Weekly Performance**\n# **{seq_score}**\n**PERFECT SEQUENCE**"
+        )
         st.write("**Sequence Type:** Monday to Friday Full Target Hit")
-        st.write("**Weekly Low Status:** Locked on Monday AL Phase")
-        st.write("**Weekly High Status:** On Track for Thursday N1 Phase")
+        st.write("**Weekly Low Status:** Locked on Tuesday AL Phase")
+        st.write("**Weekly High Status:** Target Lock on Thursday N1 Phase")
 
     with seq_col2:
         st.markdown("**Nightly Evaluation Ledger (Mon-Thu Adjustments):**")
         nightly_data = {
             "Day": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
             "Predicted Vector": ["BUY", "BUY", "BUY (Holy Hedge)", "BUY", "NEUTRAL"],
-            "Realized Vector": ["BUY", "BUY", "Pending", "Pending", "Pending"],
-            "1st Extreme Timing": ["08:30 CEST", "08:15 CEST", "TBD", "TBD", "TBD"],
-            "Midpoint Touch": ["EXACT (12:30)", "EXACT (12:45)", "TBD", "TBD", "TBD"],
+            "Realized Vector": [
+                mon_vector,
+                tue_vector,
+                wed_vector,
+                thu_vector,
+                fri_vector,
+            ],
+            "1st Extreme Timing": [
+                "08:30 CEST",
+                "08:15 CEST",
+                "08:30 CEST",
+                "08:15 CEST",
+                "TBD",
+            ],
+            "Midpoint Touch": [
+                "EXACT (12:30)",
+                "EXACT (12:45)",
+                "EXACT (13:00)",
+                "EXACT (13:00)",
+                "TBD",
+            ],
             "Daily Match Status": [
-                "100% MATCH",
-                "100% MATCH",
-                "ACTIVE",
-                "QUEUED",
-                "QUEUED",
+                mon_status,
+                tue_status,
+                wed_status,
+                thu_status,
+                fri_status,
             ],
         }
         st.dataframe(pd.DataFrame(nightly_data), use_container_width=True)
@@ -366,7 +421,7 @@ def render_performance_history_tab():
             "Year-To-Date (2026)",
         ],
         "Sequence Score": [
-            "5 / 5",
+            seq_score,
             "5 / 5",
             "4 / 5",
             "19 / 20",
@@ -416,6 +471,8 @@ def render_performance_history_tab():
     }
 
     st.table(pd.DataFrame(history_data))
+
+
 
 
 
