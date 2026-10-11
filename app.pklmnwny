@@ -205,153 +205,365 @@ def fetch_titan_sovereign_spread():
 
 
 # ==============================================================================
-# 3. PERMANENT MATHEMATICAL ENGINE IMPLEMENTATIONS
+# 3. TITAN 9-ENGINE QUANTITATIVE SYSTEM & RECONCILIATION PIPELINE
 # ==============================================================================
-def engine_1_directional_bias(open_p, high_p, low_p, close_p):
-    momentum = (close_p - open_p) / (high_p - low_p + 1e-6)
-    score = 0.5 + (momentum * 0.5)
-    return max(0.0, min(1.0, score))
 
+import math
 
-def engine_2_yield_acceleration(prev_close, close_p):
-    delta_y = (close_p - prev_close) / prev_close
-    score = 0.5 + (delta_y * 20.0)
-    return max(0.0, min(1.0, score))
-
-
-def engine_3_macro_vector(open_p, close_p):
-    p_dir = 0.88 if close_p >= open_p else 0.12
-    return p_dir
-
-
-def engine_4_range_expansion(high_p, low_p, prev_close):
-    tr = max(
-        high_p - low_p,
-        abs(high_p - prev_close),
-        abs(low_p - prev_close),
-    )
-    score = min(1.0, tr / 0.0120)
-    return score
-
-
-def engine_5_orderflow_ledger(close_p, high_p, low_p):
-    p_loc = (close_p - low_p) / (high_p - low_p + 1e-6)
-    return max(0.0, min(1.0, p_loc))
-
-
-def engine_6_volatility_dna(high_p, low_p):
-    range_pips = (high_p - low_p) * 10000
-    if range_pips < 50:
-        dna = "CLASS_A_COMPRESSED"
-    elif range_pips <= 90:
-        dna = "CLASS_B_EXPANDING"
+def classify_macro_category(atr_5: float, atr_20: float, vp_w: float):
+    """Determines Macro Category A, B, or C and assigns Monotonicity R."""
+    vr = atr_5 / atr_20 if atr_20 > 0 else 1.0
+    if vr >= 1.35 and (vp_w >= 0.75 or vp_w <= 0.25):
+        return "CATEGORY A (Sovereign Trend Expansion)", -0.95
+    elif 0.65 <= vr < 1.35:
+        return "CATEGORY B (Tactical Reversion Range)", -0.58
     else:
-        dna = "CLASS_C_EXHAUSTION"
-    return dna, 0.82
+        return "CATEGORY C (Structural Compression Chaos)", 0.14
 
+def identify_micro_dna(telemetry: dict, category: str) -> str:
+    """Classifies order-book mechanics into Micro-DNA profiles."""
+    if "CATEGORY C" in category:
+        return "TOXIC-CLUST-C"
+    
+    high_p = telemetry.get("high", 1.0)
+    low_p = telemetry.get("low", 1.0)
+    close_p = telemetry.get("close", 1.0)
+    atr_5 = telemetry.get("atr_5", 0.0050)
+    atr_20 = telemetry.get("atr_20", 0.0050)
+    
+    w_range = high_p - low_p
+    vp = (close_p - low_p) / w_range if w_range > 0 else 0.5
 
-def engine_7_liquidity_pools(low_p, high_p):
-    spread_data = fetch_titan_sovereign_spread()
-    return 0.89 if spread_data["C_SYG"] == 1 else 0.45
+    if "CATEGORY A" in category:
+        if vp >= 0.80 or vp <= 0.20:
+            return "SVRG-CONT-V1"
+        else:
+            return "MOM-RUN-V4"
+    else:
+        return "TACT-REVERT-V2"
 
+# --- INDIVIDUAL ENGINE CALCULATIONS (ENGINES 1 - 9) ---
 
-def engine_8_cross_asset(close_p, prev_close):
-    return 0.81
-
-
-def engine_9_option_magnets(close_p):
-    k_dom = round(close_p, 3)
-    return k_dom, 0.90
-
-
-# ==============================================================================
-# 4. RECONCILIATION, FUSION & DRIFT ENGINE
-# ==============================================================================
-def apply_gating(c_i):
-    if c_i >= 0.80:
-        return c_i
-    elif 0.50 <= c_i < 0.80:
-        return 0.50 * c_i
-    return 0.0
-
-
-def run_reconciliation(telemetry):
-    c1 = engine_1_directional_bias(
-        telemetry["open"],
-        telemetry["high"],
-        telemetry["low"],
-        telemetry["close"],
-    )
-    c2 = engine_2_yield_acceleration(
-        telemetry["previous_close"], telemetry["close"]
-    )
-    c3 = engine_3_macro_vector(telemetry["open"], telemetry["close"])
-    c4 = engine_4_range_expansion(
-        telemetry["high"], telemetry["low"], telemetry["previous_close"]
-    )
-    c5 = engine_5_orderflow_ledger(
-        telemetry["close"], telemetry["high"], telemetry["low"]
-    )
-    dna_class, c6 = engine_6_volatility_dna(
-        telemetry["high"], telemetry["low"]
-    )
-    c7 = engine_7_liquidity_pools(telemetry["low"], telemetry["high"])
-    c8 = engine_8_cross_asset(telemetry["close"], telemetry["previous_close"])
-    k_dom, c9 = engine_9_option_magnets(telemetry["close"])
-
-    raw_conf = {
-        "Engine_1": c1,
-        "Engine_2": c2,
-        "Engine_3": c3,
-        "Engine_4": c4,
-        "Engine_5": c5,
-        "Engine_6": c6,
-        "Engine_7": c7,
-        "Engine_8": c8,
-        "Engine_9": c9,
-    }
-
-    gated_conf = {k: apply_gating(v) for k, v in raw_conf.items()}
-
-    weighted_sum = sum(
-        ENGINE_BASE_WEIGHTS[k] * gated_conf[k] for k in raw_conf
-    )
-    normalized_weights = {
-        k: (ENGINE_BASE_WEIGHTS[k] * gated_conf[k])
-        / (weighted_sum if weighted_sum > 0 else 1)
-        for k in raw_conf
-    }
-
-    override_active = c1 >= 0.85 and c2 >= 0.85 and c3 >= 0.85
+def engine_1_flow_gps(telemetry: dict, dna: str) -> dict:
+    c_prev = telemetry.get("previous_close", telemetry.get("close", 1.0))
+    atr_d = telemetry.get("atr_d", 0.0050)
+    atr_20 = telemetry.get("atr_20", 0.0050)
+    high_p = telemetry.get("high", 1.0)
+    low_p = telemetry.get("low", 1.0)
+    
+    if dna == "SVRG-CONT-V1":
+        m_w = c_prev + (0.50 * atr_d)
+        h_w = c_prev + (0.85 * atr_d)
+        l_w = h_w - (0.809 * atr_20 * 5)
+        c_w = l_w + (0.25 * atr_d)
+        bias = "BUY" if c_prev > m_w else "SELL"
+    else:
+        m_w = (high_p + low_p + c_prev) / 3.0
+        l_w = m_w - (1.10 * atr_d)
+        h_w = m_w + (1.10 * atr_d)
+        c_w = m_w
+        bias = "NEUTRAL"
 
     return {
-        "raw_conf": raw_conf,
-        "weights": normalized_weights,
-        "override": override_active,
-        "dna_class": dna_class,
-        "magnet": k_dom,
+        "engine_id": 1, "name": "Flow & Structural GPS", "bias": bias,
+        "high": round(h_w, 5), "low": round(l_w, 5), "close": round(c_w, 5),
+        "midpoint": round(m_w, 5), "confidence": 0.88,
+        "e1_type": "LOW" if bias == "BUY" else "HIGH", "e1_phase": "Phase AL", "e1_time": "07:30 CEST",
+        "e2_type": "HIGH" if bias == "BUY" else "LOW", "e2_phase": "Phase N2", "e2_time": "18:30 CEST"
     }
 
+def engine_2_macro_sequence(telemetry: dict, category: str) -> dict:
+    o_prev = telemetry.get("open", 1.0)
+    c_prev = telemetry.get("previous_close", telemetry.get("close", 1.0))
+    atr_20 = telemetry.get("atr_20", 0.0050)
+    
+    bias = "BUY" if c_prev >= o_prev else "SELL"
+    k1, k2 = (0.82, 0.28) if bias == "BUY" else (0.28, 0.82)
+    h_pred = c_prev + (k1 * atr_20)
+    l_pred = c_prev - (k2 * atr_20)
+    m_pred = (h_pred + l_pred) / 2.0
+    c_pred = c_prev + ((k1 - k2) * 0.50 * atr_20)
 
-def get_dynamic_daily_timing(day_name, dna_class, symbol):
-    """Calculates dynamic time windows and target price multipliers based on Day & Volatility DNA."""
-    day_map = {
-        "Monday": {"e1_time": "04:15 CEST", "mid_time": "10:30 CEST", "e2_time": "15:45 CEST", "mult_e1": -0.6, "mult_e2": 1.1},
-        "Tuesday": {"e1_time": "08:15 CEST", "mid_time": "12:45 CEST", "e2_time": "16:15 CEST", "mult_e1": -1.0, "mult_e2": 1.4},
-        "Wednesday": {"e1_time": "08:30 CEST", "mid_time": "13:00 CEST", "e2_time": "16:30 CEST", "mult_e1": -0.8, "mult_e2": 1.5},
-        "Thursday": {"e1_time": "08:15 CEST", "mid_time": "13:00 CEST", "e2_time": "17:40 CEST", "mult_e1": -1.1, "mult_e2": 1.6},
-        "Friday": {"e1_time": "08:30 CEST", "mid_time": "12:00 CEST", "e2_time": "16:00 CEST", "mult_e1": -0.2, "mult_e2": 1.2},
+    conf = 0.92 if "CATEGORY A" in category else (0.65 if "CATEGORY B" in category else 0.10)
+
+    return {
+        "engine_id": 2, "name": "Macro & Sovereign Sequence", "bias": bias,
+        "high": round(h_pred, 5), "low": round(l_pred, 5), "close": round(c_pred, 5),
+        "midpoint": round(m_pred, 5), "confidence": conf,
+        "e1_type": "LOW" if bias == "BUY" else "HIGH", "e1_phase": "Phase L1", "e1_time": "09:45 CEST",
+        "e2_type": "HIGH" if bias == "BUY" else "LOW", "e2_phase": "Phase N1", "e2_time": "16:15 CEST"
     }
-    config = day_map.get(day_name, day_map["Friday"])
 
-    if dna_class == "CLASS_A_COMPRESSED":
-        config["mult_e1"] *= 0.8
-        config["mult_e2"] *= 0.85
-    elif dna_class == "CLASS_C_EXHAUSTION":
-        config["mult_e1"] *= 1.25
-        config["mult_e2"] *= 1.20
+def engine_3_liquidity_meta_ai(telemetry: dict) -> dict:
+    c_prev = telemetry.get("previous_close", telemetry.get("close", 1.0))
+    spot = telemetry.get("close", 1.0)
+    atr_d = telemetry.get("atr_d", 0.0050)
+    
+    bias = "BUY" if spot >= c_prev else "SELL"
+    h_pred = spot + (0.75 * atr_d)
+    l_pred = spot - (0.75 * atr_d)
+    
+    return {
+        "engine_id": 3, "name": "Macro Liquidity & Meta-AI", "bias": bias,
+        "high": round(h_pred, 5), "low": round(l_pred, 5), "close": round(c_prev, 5),
+        "midpoint": round((h_pred + l_pred) / 2, 5), "confidence": 0.84,
+        "e1_type": "LOW" if bias == "BUY" else "HIGH", "e1_phase": "Phase AL", "e1_time": "08:15 CEST",
+        "e2_type": "HIGH" if bias == "BUY" else "LOW", "e2_phase": "Phase N2", "e2_time": "17:45 CEST"
+    }
 
-    return config
+def engine_4_time_geometry(telemetry: dict) -> dict:
+    spot = telemetry.get("close", 1.0)
+    atr_d = telemetry.get("atr_d", 0.0050)
+    alpha1, alpha2 = 0.618, 0.382
+    delta_p = atr_d * (alpha1 + alpha2)
+    
+    l_pred = spot - (alpha2 * delta_p)
+    h_pred = l_pred + (1.272 * delta_p)
+    
+    return {
+        "engine_id": 4, "name": "Titan Time Geometry (TTGE)", "bias": "BUY",
+        "high": round(h_pred, 5), "low": round(l_pred, 5), "close": round(spot + (0.15 * delta_p), 5),
+        "midpoint": round((h_pred + l_pred) / 2, 5), "confidence": 0.86,
+        "e1_type": "LOW", "e1_phase": "Phase A2", "e1_time": "03:30 CEST",
+        "e2_type": "HIGH", "e2_phase": "Phase N1", "e2_time": "16:15 CEST"
+    }
+
+def engine_5_riemannian_manifold(telemetry: dict) -> dict:
+    high_p = telemetry.get("high", 1.0)
+    low_p = telemetry.get("low", 1.0)
+    close_p = telemetry.get("close", 1.0)
+    atr_d = telemetry.get("atr_d", 0.0050)
+    
+    fvm = (high_p + low_p + close_p) / 3.0
+    bias = "BUY" if close_p > fvm else "SELL"
+    
+    return {
+        "engine_id": 5, "name": "Riemannian Volatility Manifold", "bias": bias,
+        "high": round(close_p + (0.65 * atr_d), 5), "low": round(close_p - (0.65 * atr_d), 5),
+        "close": round(fvm, 5), "midpoint": round(fvm, 5), "confidence": 0.81,
+        "e1_type": "LOW", "e1_phase": "Phase AL", "e1_time": "07:15 CEST",
+        "e2_type": "HIGH", "e2_phase": "Phase N2", "e2_time": "18:00 CEST"
+    }
+
+def engine_6_microstructure_timing(telemetry: dict) -> dict:
+    spot = telemetry.get("close", 1.0)
+    return {
+        "engine_id": 6, "name": "Microstructure & Dealer Timing", "bias": "BUY",
+        "high": round(spot + 0.0050, 5), "low": round(spot - 0.0030, 5),
+        "close": round(spot + 0.0020, 5), "midpoint": round(spot + 0.0010, 5),
+        "confidence": 0.89, "e1_type": "LOW", "e1_phase": "Phase L1", "e1_time": "09:15 CEST",
+        "e2_type": "HIGH", "e2_phase": "Phase N1", "e2_time": "15:45 CEST"
+    }
+
+def engine_7_sovereign_yield_gps(telemetry: dict) -> tuple:
+    bund_10y = telemetry.get("bund_10y", 2.25)
+    ust_10y = telemetry.get("ust_10y", 4.25)
+    ois_speed = telemetry.get("ois_shift_speed", 0.18)
+    spot = telemetry.get("close", 1.0)
+    
+    euro_spread = bund_10y - ust_10y
+    
+    if abs(ois_speed) < 0.05:
+        c_syg = 0.55
+        state_desc = "FLATLINE_CAP (55% Max Size)"
+    elif math.copysign(1, euro_spread) != math.copysign(1, ois_speed) and abs(ois_speed) > 0.40:
+        c_syg = 0.00
+        state_desc = "YDA_7_ACTIVE (HARD BLOCK)"
+    else:
+        c_syg = 1.00
+        state_desc = "CAT_A_VALIDATED (100% Size)"
+
+    eng_data = {
+        "engine_id": 7, "name": f"Sovereign Yield GPS ({state_desc})",
+        "bias": "BUY" if euro_spread > -1.50 else "SELL",
+        "high": round(spot + 0.0040, 5), "low": round(spot - 0.0020, 5),
+        "close": round(spot + 0.0015, 5), "midpoint": round(spot + 0.0010, 5),
+        "confidence": c_syg, "e1_type": "LOW", "e1_phase": "Phase AL", "e1_time": "08:00 CEST",
+        "e2_type": "HIGH", "e2_phase": "Phase N2", "e2_time": "17:30 CEST"
+    }
+    return eng_data, c_syg
+
+def engine_8_usd_liquidity_squeeze(telemetry: dict) -> tuple:
+    bs_curr = telemetry.get("bs_3m_eurusd", -32.5)
+    bs_prev = telemetry.get("bs_3m_24h_ago", -31.0)
+    ldx = telemetry.get("ldx_index", 0.92)
+    spot = telemetry.get("close", 1.0)
+    
+    delta_bs = bs_curr - bs_prev
+    
+    if ldx < 0.40 or abs(delta_bs) > 6.0:
+        psi_glx = 0.00
+        bias = "NEUTRAL"
+    elif ldx < 0.85 or abs(delta_bs) > 2.5:
+        psi_glx = 0.50
+        bias = "BUY"
+    else:
+        psi_glx = 1.00
+        bias = "BUY"
+
+    eng_data = {
+        "engine_id": 8, "name": "Global USD Liquidity (GLX-8)", "bias": bias,
+        "high": round(spot + 0.0045, 5), "low": round(spot - 0.0025, 5),
+        "close": round(spot + 0.0010, 5), "midpoint": round(spot + 0.0010, 5),
+        "confidence": psi_glx, "e1_type": "LOW", "e1_phase": "Phase L1", "e1_time": "10:00 CEST",
+        "e2_type": "HIGH", "e2_phase": "Phase N1", "e2_time": "16:00 CEST"
+    }
+    return eng_data, psi_glx
+
+def engine_9_otc_option_expiries(telemetry: dict) -> tuple:
+    gamma = telemetry.get("dealer_net_gamma", 650000000)
+    target_strike = telemetry.get("dominant_strike", 1.13100)
+    spot = telemetry.get("close", 1.0)
+    
+    if gamma >= 500000000:
+        pin_active = True
+        magnet_target = target_strike
+    else:
+        pin_active = False
+        magnet_target = spot + 0.0030
+
+    eng_data = {
+        "engine_id": 9, "name": f"OTC Option Expiry (OPX-9 Magnet: {magnet_target})",
+        "bias": "BUY" if magnet_target >= spot else "SELL",
+        "high": round(max(magnet_target, spot + 0.0020), 5),
+        "low": round(min(magnet_target, spot - 0.0020), 5),
+        "close": round(magnet_target, 5), "midpoint": round(magnet_target, 5),
+        "confidence": 0.91 if pin_active else 0.50, "e1_type": "LOW",
+        "e1_phase": "Phase AL", "e1_time": "08:30 CEST",
+        "e2_type": "HIGH", "e2_phase": "Phase N4", "e2_time": "16:00 CEST (NY CUT PIN)"
+    }
+    return eng_data, (magnet_target if pin_active else 0.0)
+
+# --- RECONCILIATION ENGINE PIPELINE ---
+
+def run_reconciliation(telemetry: dict, sunday_baseline: dict = None) -> dict:
+    if sunday_baseline is None:
+        sunday_baseline = {
+            "high": telemetry.get("high", 1.13100),
+            "low": telemetry.get("low", 1.12200),
+            "close": telemetry.get("close", 1.12800)
+        }
+
+    category, r_coeff = classify_macro_category(
+        telemetry.get("atr_5", 0.0058), telemetry.get("atr_20", 0.0052), 0.85
+    )
+    micro_dna = identify_micro_dna(telemetry, category)
+
+    e1 = engine_1_flow_gps(telemetry, micro_dna)
+    e2 = engine_2_macro_sequence(telemetry, category)
+    e3 = engine_3_liquidity_meta_ai(telemetry)
+    e4 = engine_4_time_geometry(telemetry)
+    e5 = engine_5_riemannian_manifold(telemetry)
+    e6 = engine_6_microstructure_timing(telemetry)
+    e7, c_syg = engine_7_sovereign_yield_gps(telemetry)
+    e8, psi_glx = engine_8_usd_liquidity_squeeze(telemetry)
+    e9, magnet_pin = engine_9_otc_option_expiries(telemetry)
+
+    all_engines = [e1, e2, e3, e4, e5, e6, e7, e8, e9]
+
+    # Directional Consensus (Engines 1-3)
+    biases = [e1["bias"], e2["bias"], e3["bias"]]
+    buy_count = biases.count("BUY")
+    sell_count = biases.count("SELL")
+
+    if buy_count >= 2:
+        consensus_direction = "BUY"
+        override_locked = True
+    elif sell_count >= 2:
+        consensus_direction = "SELL"
+        override_locked = True
+    else:
+        consensus_direction = "NEUTRAL"
+        override_locked = False
+
+    # Shannon Entropy Confidence Fusion
+    weighted_highs, weighted_lows, weighted_closes, weighted_mids = [], [], [], []
+    total_weight = 0.0
+
+    for eng in all_engines:
+        c = eng["confidence"]
+        w = c * 1.0 if c >= 0.80 else (c * 0.5 if c >= 0.50 else 0.0)
+        
+        if eng["engine_id"] in [1, 2, 3]:
+            w *= 1.10
+        elif eng["engine_id"] == 6:
+            w *= 0.80
+
+        weighted_highs.append(eng["high"] * w)
+        weighted_lows.append(eng["low"] * w)
+        weighted_closes.append(eng["close"] * w)
+        weighted_mids.append(eng["midpoint"] * w)
+        total_weight += w
+
+    spot = telemetry.get("close", 1.1258)
+    rec_high = sum(weighted_highs) / total_weight if total_weight > 0 else spot
+    rec_low = sum(weighted_lows) / total_weight if total_weight > 0 else spot
+    rec_close = sum(weighted_closes) / total_weight if total_weight > 0 else spot
+    rec_mid = sum(weighted_mids) / total_weight if total_weight > 0 else spot
+
+    if magnet_pin > 0.0:
+        rec_high = max(rec_high, magnet_pin)
+        rec_close = magnet_pin
+
+    # Dual-Threshold Drift Calculation (Delta S)
+    s_day = [rec_high, rec_low, rec_close]
+    s_week = [sunday_baseline["high"], sunday_baseline["low"], sunday_baseline["close"]]
+    
+    delta_s = math.sqrt(sum((d - w) ** 2 for d, w in zip(s_day, s_week))) * 100.0
+
+    if delta_s < 0.95:
+        drift_class = "Passive Drift (<0.95)"
+        action = "MAINTAIN SUNDAY GPS"
+        trust_level = "SAFE"
+    elif 0.95 <= delta_s < 1.10:
+        drift_class = "Confidence Gate (0.95)"
+        action = "MAINTAIN GPS - HIGH ALERT"
+        trust_level = "CAUTION"
+    elif 1.10 <= delta_s < 1.25:
+        drift_class = "Hard Trigger (1.10)"
+        action = "UPDATE NEXT-DAY GPS"
+        trust_level = "AMENDED"
+    else:
+        drift_class = "Hard Fail (1.25)"
+        action = "RISK-CONTROLLED MODE (NO NEW SIGNALS)"
+        trust_level = "DANGEROUS"
+
+    if c_syg == 0.00:
+        action = "BLOCKED BY ENGINE 7 (SOVEREIGN YIELD DIVERGENCE)"
+        trust_level = "DANGEROUS // EXECUTION DEACTIVATED"
+    elif psi_glx == 0.00:
+        action = "BLOCKED BY ENGINE 8 (SYSTEMIC USD LIQUIDITY PANIC)"
+        trust_level = "DANGEROUS // EXECUTION DEACTIVATED"
+
+    final_sizing = psi_glx * (0.55 if c_syg == 0.55 else 1.00)
+
+    return {
+        "HEADER": "TITAN 9-ENGINE NIGHTLY RECONCILIATION REPORT (SPAIN TIME / CEST)",
+        "TARGET_PAIR": telemetry.get("pair", "EURUSD"),
+        "DRIFT_AND_GATING": {
+            "delta_s": round(delta_s, 4),
+            "drift_classification": drift_class,
+            "override_status": "HARD-LOCKED" if override_locked else "DYNAMIC FUSION",
+            "c_syg": c_syg,
+            "psi_glx": f"{final_sizing:.2f}x",
+            "magnet_pin": magnet_pin if magnet_pin > 0 else "OFF"
+        },
+        "RECONCILIATION_DECISION": {
+            "action": action,
+            "trust_level": trust_level,
+            "category": category,
+            "micro_dna": micro_dna
+        },
+        "FINAL_NEXT_DAY_GPS": {
+            "direction": consensus_direction,
+            "predicted_open": round(spot, 5),
+            "predicted_high": round(rec_high, 5),
+            "predicted_low": round(rec_low, 5),
+            "predicted_close": round(rec_close, 5),
+            "predicted_midpoint": round(rec_mid, 5)
+        }
+    }
+
 
 
 # ==============================================================================
