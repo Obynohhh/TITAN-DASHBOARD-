@@ -401,35 +401,29 @@ def evaluate_and_record_session(telemetry, e1_target, e2_target, mid_target, pre
 
 
 # ==============================================================================
-# PUSHOVER SMARTWATCH ALERT ENGINE
 # ==============================================================================
+# NTFY SMARTWATCH & MOBILE ALERT ENGINE
+# ==============================================================================
+NTFY_TOPIC = "TYf7NDB9moLR3kTq"
+
+
 def send_pushover_watch_alert(title, message):
-    """Pushes high-priority execution alerts directly to smartwatch face."""
-    user_key = st.secrets.get(
-        "PUSHOVER_USER_KEY", "u23ge8dqk2f1dta1ncae7pnndjasbp"
+  """Dispatches urgent push notifications via ntfy straight to phone & smartwatch."""
+  url = f"https://ntfy.sh/{NTFY_TOPIC}"
+
+  headers = {
+      "Title": title,
+      "Priority": "5",  # Priority 5 (max/urgent) bypasses quiet hours and triggers long vibrations
+      "Tags": "chart_with_upwards_trend,warning",
+  }
+
+  try:
+    requests.post(
+        url, data=message.encode("utf-8"), headers=headers, timeout=5
     )
-    api_token = st.secrets.get(
-        "PUSHOVER_API_TOKEN", "aibc19ze8exniszsg7ojbqzpsq6ab1"
-    )
+  except Exception as e:
+    print(f"ntfy watch alert failed: {e}")
 
-    if not api_token or not user_key:
-        return
-
-    payload = {
-        "token": api_token,
-        "user": user_key,
-        "title": title,
-        "message": message,
-        "priority": 1,  # Bypasses quiet hours on smartwatch
-        "sound": "alarm",
-    }
-
-    try:
-        requests.post(
-            "https://api.pushover.net/1/messages.json", data=payload, timeout=5
-        )
-    except Exception as e:
-        print(f"Pushover watch alert failed: {e}")
 
 
 def render_performance_history_tab():
