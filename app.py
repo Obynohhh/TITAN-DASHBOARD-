@@ -1,6 +1,5 @@
 from datetime import datetime, timedelta
 import math
-import base64
 import numpy as np
 import pandas as pd
 import requests
@@ -17,6 +16,7 @@ st.set_page_config(
 )
 
 API_KEY = "eb11f97c310f407da9961dc7c67a697e"
+FRED_API_KEY = "9019cc44224ad07f6af165b8710dbafd"
 
 ENGINE_BASE_WEIGHTS = {
     "Engine_1": 0.15,
@@ -120,12 +120,12 @@ if "daily_performance_ledger" not in st.session_state:
 
 
 # ==============================================================================
-# 2. LIVE TELEMETRY INGESTION (TWELVE DATA API)
+# 2. LIVE TELEMETRY INGESTION (TWELVE DATA & FRED API)
 # ==============================================================================
 @st.cache_data(ttl=5)
 def fetch_twelve_data_quote(symbol="EUR/USD"):
     url = f"https://api.twelvedata.com/quote?symbol={symbol}&apikey={API_KEY}"
-    fallback_close = 1.3241 if symbol == "GBP/USD" else 1.1258
+    fallback_close = 1.3396 if symbol == "GBP/USD" else 1.1214
 
     try:
         res = requests.get(url, timeout=10).json()
@@ -151,8 +151,6 @@ def fetch_twelve_data_quote(symbol="EUR/USD"):
         "previous_close": fallback_close - 0.0020,
         "status": "FALLBACK MODE",
     }
-
-FRED_API_KEY = "9019cc44224ad07f6af165b8710dbafd"
 
 
 @st.cache_data(ttl=3600)
@@ -208,8 +206,6 @@ def fetch_titan_sovereign_spread():
 # 3. TITAN 9-ENGINE QUANTITATIVE SYSTEM & RECONCILIATION PIPELINE
 # ==============================================================================
 
-import math
-
 def classify_macro_category(atr_5: float, atr_20: float, vp_w: float):
     """Determines Macro Category A, B, or C and assigns Monotonicity R."""
     vr = atr_5 / atr_20 if atr_20 > 0 else 1.0
@@ -220,6 +216,7 @@ def classify_macro_category(atr_5: float, atr_20: float, vp_w: float):
     else:
         return "CATEGORY C (Structural Compression Chaos)", 0.14
 
+
 def identify_micro_dna(telemetry: dict, category: str) -> str:
     """Classifies order-book mechanics into Micro-DNA profiles."""
     if "CATEGORY C" in category:
@@ -228,8 +225,6 @@ def identify_micro_dna(telemetry: dict, category: str) -> str:
     high_p = telemetry.get("high", 1.0)
     low_p = telemetry.get("low", 1.0)
     close_p = telemetry.get("close", 1.0)
-    atr_5 = telemetry.get("atr_5", 0.0050)
-    atr_20 = telemetry.get("atr_20", 0.0050)
     
     w_range = high_p - low_p
     vp = (close_p - low_p) / w_range if w_range > 0 else 0.5
@@ -241,6 +236,28 @@ def identify_micro_dna(telemetry: dict, category: str) -> str:
             return "MOM-RUN-V4"
     else:
         return "TACT-REVERT-V2"
+
+
+def get_dynamic_daily_timing(day_name: str, dna_class: str, symbol: str) -> dict:
+    """Computes daily extreme timing phases and volatility multipliers."""
+    day_map = {
+        "Monday": {"mult_e1": -0.45, "mult_e2": 0.85, "e1_time": "08:15 CEST", "mid_time": "12:30 CEST", "e2_time": "16:30 CEST"},
+        "Tuesday": {"mult_e1": -0.30, "mult_e2": 1.10, "e1_time": "08:00 CEST", "mid_time": "12:30 CEST", "e2_time": "17:15 CEST"},
+        "Wednesday": {"mult_e1": -0.20, "mult_e2": 1.35, "e1_time": "07:45 CEST", "mid_time": "12:30 CEST", "e2_time": "16:45 CEST"},
+        "Thursday": {"mult_e1": -0.50, "mult_e2": 1.40, "e1_time": "08:15 CEST", "mid_time": "12:30 CEST", "e2_time": "16:30 CEST"},
+        "Friday": {"mult_e1": -0.15, "mult_e2": 0.95, "e1_time": "08:30 CEST", "mid_time": "12:30 CEST", "e2_time": "16:00 CEST"},
+    }
+    
+    config = day_map.get(day_name, day_map["Thursday"])
+    
+    # Scale multipliers for MOM-RUN-V4 vs SVRG-CONT-V1
+    if dna_class == "MOM-RUN-V4":
+        config["mult_e2"] *= 1.15
+    elif dna_class == "TACT-REVERT-V2":
+        config["mult_e2"] *= 0.85
+
+    return config
+
 
 # --- INDIVIDUAL ENGINE CALCULATIONS (ENGINES 1 - 9) ---
 
@@ -412,7 +429,7 @@ def engine_8_usd_liquidity_squeeze(telemetry: dict) -> tuple:
 
 def engine_9_otc_option_expiries(telemetry: dict) -> tuple:
     gamma = telemetry.get("dealer_net_gamma", 650000000)
-    target_strike = telemetry.get("dominant_strike", 1.13100)
+    target_strike = telemetry.get("dominant_strike", 1.12450)
     spot = telemetry.get("close", 1.0)
     
     if gamma >= 500000000:
@@ -439,9 +456,9 @@ def engine_9_otc_option_expiries(telemetry: dict) -> tuple:
 def run_reconciliation(telemetry: dict, sunday_baseline: dict = None) -> dict:
     if sunday_baseline is None:
         sunday_baseline = {
-            "high": telemetry.get("high", 1.13100),
-            "low": telemetry.get("low", 1.12200),
-            "close": telemetry.get("close", 1.12800)
+            "high": telemetry.get("high", 1.12560),
+            "low": telemetry.get("low", 1.11890),
+            "close": telemetry.get("close", 1.12140)
         }
 
     category, r_coeff = classify_macro_category(
@@ -478,6 +495,8 @@ def run_reconciliation(telemetry: dict, sunday_baseline: dict = None) -> dict:
 
     # Shannon Entropy Confidence Fusion
     weighted_highs, weighted_lows, weighted_closes, weighted_mids = [], [], [], []
+    weights_dict = {}
+    conf_dict = {}
     total_weight = 0.0
 
     for eng in all_engines:
@@ -489,13 +508,16 @@ def run_reconciliation(telemetry: dict, sunday_baseline: dict = None) -> dict:
         elif eng["engine_id"] == 6:
             w *= 0.80
 
+        weights_dict[f"Engine_{eng['engine_id']}"] = round(w, 4)
+        conf_dict[f"Engine_{eng['engine_id']} ({eng['name']})"] = c
+
         weighted_highs.append(eng["high"] * w)
         weighted_lows.append(eng["low"] * w)
         weighted_closes.append(eng["close"] * w)
         weighted_mids.append(eng["midpoint"] * w)
         total_weight += w
 
-    spot = telemetry.get("close", 1.1258)
+    spot = telemetry.get("close", 1.1214)
     rec_high = sum(weighted_highs) / total_weight if total_weight > 0 else spot
     rec_low = sum(weighted_lows) / total_weight if total_weight > 0 else spot
     rec_close = sum(weighted_closes) / total_weight if total_weight > 0 else spot
@@ -537,9 +559,18 @@ def run_reconciliation(telemetry: dict, sunday_baseline: dict = None) -> dict:
 
     final_sizing = psi_glx * (0.55 if c_syg == 0.55 else 1.00)
 
+    # UNIFIED OUTPUT SCHEMA WITH ALL MANDATED KEYS
     return {
         "HEADER": "TITAN 9-ENGINE NIGHTLY RECONCILIATION REPORT (SPAIN TIME / CEST)",
-        "TARGET_PAIR": telemetry.get("pair", "EURUSD"),
+        "TARGET_PAIR": telemetry.get("symbol", "EUR/USD"),
+        "dna_class": micro_dna,
+        "override": "HARD-LOCKED" if override_locked else "DYNAMIC FUSION",
+        "directional_override": "HARD-LOCKED" if override_locked else "DYNAMIC FUSION",
+        "magnet": f"{magnet_pin:.5f}" if magnet_pin > 0 else "1.12450",
+        "engine9_magnet": f"{magnet_pin:.5f}" if magnet_pin > 0 else "1.12450",
+        "weights": weights_dict,
+        "raw_conf": conf_dict,
+        "direction": consensus_direction,
         "DRIFT_AND_GATING": {
             "delta_s": round(delta_s, 4),
             "drift_classification": drift_class,
@@ -563,7 +594,6 @@ def run_reconciliation(telemetry: dict, sunday_baseline: dict = None) -> dict:
             "predicted_midpoint": round(rec_mid, 5)
         }
     }
-
 
 
 # ==============================================================================
@@ -601,7 +631,7 @@ def evaluate_and_record_session(telemetry, e1_target, e2_target, mid_target, pre
             "Direction Match": dir_match,
             "High Error (Pips)": high_err,
             "Low Error (Pips)": low_err,
-            "Timing Dev (m)": 8,  # Evaluated offset
+            "Timing Dev (m)": 8,
             "Midpoint Touch": mid_touched,
             "Sequence Score": score,
         }
@@ -692,12 +722,12 @@ rec_results = run_reconciliation(telemetry)
 st.title("⚡ TITAN 9-Engine Master Control & Reconciliation Suite")
 st.caption(f"Live Telemetry Status: **{telemetry['status']}** | Connected Pair: **{selected_symbol}**")
 
+# SAFE KPI RENDERING BLOCK WITH DEFENSIVE FALLBACKS
 kpi1, kpi2, kpi3, kpi4 = st.columns(4)
 kpi1.metric(f"Live Price ({selected_symbol})", f"{telemetry['close']:.4f}")
 kpi2.metric("DNA Class", rec_results.get("dna_class", "SVRG-CONT-V1"))
 kpi3.metric("Directional Override", rec_results.get("override", rec_results.get("directional_override", "HARD-LOCKED")))
 kpi4.metric("Engine 9 Magnet Strike", rec_results.get("magnet", rec_results.get("engine9_magnet", "1.12450")))
-
 
 st.markdown("---")
 
@@ -723,7 +753,7 @@ with tab1:
     with col_w1:
         st.subheader("Weekly Vector Summary")
         st.write(f"**Symbol:** {selected_symbol}")
-        st.write(f"**DNA Class Projection:** {rec_results['dna_class']}")
+        st.write(f"**DNA Class Projection:** {rec_results.get('dna_class', 'SVRG-CONT-V1')}")
         st.write("**Sequence Projection:** $E_1 \\rightarrow M \\rightarrow E_2$")
         st.write(f"**Expected Weekly Close:** {telemetry['close'] + (pip_factor * 0.75):.4f}")
 
@@ -755,12 +785,13 @@ with tab2:
     current_day_idx = min(datetime.utcnow().weekday(), 4)
     selected_day = st.selectbox("Select Execution Day", days, index=current_day_idx)
 
-    # ANCHOR LOCKED TO THURSDAY CLOSE (PREVIOUS CLOSE) TO PREVENT FLOATING TARGETS
+    # ANCHOR LOCKED TO PREVIOUS CLOSE TO PREVENT FLOATING TARGETS
     base_price = telemetry["previous_close"]
     daily_pip = 0.0050 if selected_symbol == "GBP/USD" else 0.0035
 
     # DYNAMIC TIME AND TARGET ENGINE RECONCILIATION
-    timing = get_dynamic_daily_timing(selected_day, rec_results["dna_class"], selected_symbol)
+    active_dna = rec_results.get("dna_class", "SVRG-CONT-V1")
+    timing = get_dynamic_daily_timing(selected_day, active_dna, selected_symbol)
 
     e1_target = round(base_price + (daily_pip * timing["mult_e1"]), 4)
     e2_target = round(base_price + (daily_pip * timing["mult_e2"]), 4)
@@ -769,7 +800,7 @@ with tab2:
     # AUTOMATED PERFORMANCE REGISTRATION CALL
     evaluate_and_record_session(telemetry, e1_target, e2_target, mid_target, pred_direction="BUY")
 
-    st.subheader(f"📍 GPS Map — {selected_day} ({selected_symbol}) | {rec_results['dna_class']}")
+    st.subheader(f"📍 GPS Map — {selected_day} ({selected_symbol}) | {active_dna}")
     col_d1, col_d2, col_d3, col_d4 = st.columns(4)
     col_d1.metric("1st Extreme (E1)", f"{e1_target:.4f}", f"Time: {timing['e1_time']}")
     col_d2.metric("Midpoint Anchor (M)", f"{mid_target:.4f}", f"Time: {timing['mid_time']}")
@@ -830,14 +861,16 @@ with tab3:
     st.header(f"⚙️ Math Engine Matrix & Fusion Weights — {selected_symbol}")
     col_e1, col_e2 = st.columns([2, 1])
     with col_e1:
+        weights_map = rec_results.get("weights", ENGINE_BASE_WEIGHTS)
         weights_df = pd.DataFrame(
-            list(rec_results["weights"].items()),
+            list(weights_map.items()),
             columns=["Engine", "Normalized Weight"],
         )
         st.bar_chart(weights_df.set_index("Engine"))
     with col_e2:
         st.subheader("Raw Confidence Scores")
-        for eng, val in rec_results["raw_conf"].items():
+        conf_map = rec_results.get("raw_conf", {})
+        for eng, val in conf_map.items():
             st.write(f"**{eng}:** `{val:.4f}`")
 
 # ------------------------------------------------------------------------------
@@ -845,11 +878,12 @@ with tab3:
 # ------------------------------------------------------------------------------
 with tab4:
     st.header("📋 Operator Execution Protocol & Invalidation Suite")
+    active_timing = get_dynamic_daily_timing("Thursday", rec_results.get("dna_class", "SVRG-CONT-V1"), selected_symbol)
     st.markdown(f"""
     ### 🟢 Authorized Action Protocols ({selected_symbol})
-    1. **{timing['e1_time']}**: Observe price relative to $E_1$ target boundary (`{e1_target:.4f}`).
-    2. **{timing['mid_time']}**: Move Stop Loss to Break-Even once Midpoint Anchor (`{mid_target:.4f}`) is touched.
-    3. **{timing['e2_time']}**: Close remaining position at $E_2$ (`{e2_target:.4f}`).
+    1. **{active_timing['e1_time']}**: Observe price relative to $E_1$ target boundary (`{telemetry['previous_close'] - 0.0015:.4f}`).
+    2. **{active_timing['mid_time']}**: Move Stop Loss to Break-Even once Midpoint Anchor is touched.
+    3. **{active_timing['e2_time']}**: Close remaining position at $E_2$ (`{telemetry['previous_close'] + 0.0045:.4f}`).
     """)
 
 # ------------------------------------------------------------------------------
