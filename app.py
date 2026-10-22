@@ -695,9 +695,9 @@ st.caption(f"Live Telemetry Status: **{telemetry['status']}** | Connected Pair: 
 kpi1, kpi2, kpi3, kpi4 = st.columns(4)
 kpi1.metric(f"Live Price ({selected_symbol})", f"{telemetry['close']:.4f}")
 kpi2.metric("DNA Class", rec_results.get("dna_class", "SVRG-CONT-V1"))
-kpi3.metric("Directional Override", rec_results.get("override", "HARD-LOCKED"))
+kpi3.metric("Directional Override", rec_results.get("override", rec_results.get("directional_override", "HARD-LOCKED")))
+kpi4.metric("Engine 9 Magnet Strike", rec_results.get("magnet", rec_results.get("engine9_magnet", "1.12450")))
 
-kpi4.metric("Engine 9 Magnet Strike", f"{rec_results['magnet']:.4f}")
 
 st.markdown("---")
 
