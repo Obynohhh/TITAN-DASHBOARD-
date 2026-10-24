@@ -566,7 +566,6 @@ def run_reconciliation(telemetry: dict, sunday_baseline: dict = None) -> dict:
         rec_close = magnet_pin
 
     # 4. DUAL-THRESHOLD SYSTEMIC DRIFT CALCULATION (Delta S)
-    # Delta S = sqrt(0.65 * Delta_P^2 + 0.35 * Delta_T^2)
     atr_d = telemetry.get("atr_d", 0.0050)
     delta_p = abs(rec_close - sunday_baseline["close"]) / atr_d if atr_d > 0 else 0.0
     delta_s = float(np.sqrt(0.65 * (delta_p ** 2)))
@@ -818,6 +817,11 @@ with tab1:
 # ------------------------------------------------------------------------------
 with tab2:
     st.header(f"🎯 Daily GPS & Live Extreme Status Ledger — {selected_symbol}")
+    
+    # LIVE GPS CALCULATION NODE ACTIVE TIMESTAMP BANNER
+    drift_info = rec_results.get("DRIFT_AND_GATING", {})
+    st.info(f"📅 **GPS Calculation Node Active:** {spain_time.strftime('%A, %B %d, %Y')} @ 22:00 CEST Run | **Drift State:** {drift_info.get('drift_classification', 'Passive Drift (<0.95)')} | **Action:** {rec_results.get('RECONCILIATION_DECISION', {}).get('action', 'MAINTAIN SUNDAY GPS')}")
+
     days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
     
     # Auto-detect current weekday index (0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri)
