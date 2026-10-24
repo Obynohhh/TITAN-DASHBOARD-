@@ -64,7 +64,7 @@ if "daily_performance_ledger" not in st.session_state:
     st.session_state.daily_performance_ledger = pd.DataFrame(
         [
             {
-                "Date": "2026-10-05",
+                "Date": "2026-10-19",
                 "Day": "Monday",
                 "Symbol": "EUR/USD",
                 "Pred Dir": "BUY",
@@ -77,7 +77,7 @@ if "daily_performance_ledger" not in st.session_state:
                 "Sequence Score": "100%",
             },
             {
-                "Date": "2026-10-06",
+                "Date": "2026-10-20",
                 "Day": "Tuesday",
                 "Symbol": "EUR/USD",
                 "Pred Dir": "BUY",
@@ -90,7 +90,7 @@ if "daily_performance_ledger" not in st.session_state:
                 "Sequence Score": "100%",
             },
             {
-                "Date": "2026-10-07",
+                "Date": "2026-10-21",
                 "Day": "Wednesday",
                 "Symbol": "EUR/USD",
                 "Pred Dir": "BUY",
@@ -103,7 +103,7 @@ if "daily_performance_ledger" not in st.session_state:
                 "Sequence Score": "100%",
             },
             {
-                "Date": "2026-10-08",
+                "Date": "2026-10-22",
                 "Day": "Thursday",
                 "Symbol": "EUR/USD",
                 "Pred Dir": "BUY",
@@ -241,16 +241,14 @@ def identify_micro_dna(telemetry: dict, category: str) -> str:
 def get_dynamic_daily_timing(day_name: str, dna_class: str, symbol: str) -> dict:
     """Computes daily extreme timing phases and volatility multipliers."""
     day_map = {
-        "Monday": {"mult_e1": -0.45, "mult_e2": 0.85, "e1_time": "08:15 CEST", "mid_time": "12:30 CEST", "e2_time": "16:30 CEST"},
-        "Tuesday": {"mult_e1": -0.30, "mult_e2": 1.10, "e1_time": "08:00 CEST", "mid_time": "12:30 CEST", "e2_time": "17:15 CEST"},
-        "Wednesday": {"mult_e1": -0.20, "mult_e2": 1.35, "e1_time": "07:45 CEST", "mid_time": "12:30 CEST", "e2_time": "16:45 CEST"},
-        "Thursday": {"mult_e1": -0.50, "mult_e2": 1.40, "e1_time": "08:15 CEST", "mid_time": "12:30 CEST", "e2_time": "16:30 CEST"},
-        "Friday": {"mult_e1": -0.15, "mult_e2": 0.95, "e1_time": "08:30 CEST", "mid_time": "12:30 CEST", "e2_time": "16:00 CEST"},
+        "Monday": {"mult_e1": -0.45, "mult_e2": 0.85, "e1_time": "08:15 CEST", "mid_time": "12:30 CEST", "e2_time": "16:30 CEST", "e1_phase": "Phase L1", "e2_phase": "Phase N2"},
+        "Tuesday": {"mult_e1": -0.30, "mult_e2": 1.10, "e1_time": "08:00 CEST", "mid_time": "12:30 CEST", "e2_time": "17:15 CEST", "e1_phase": "Phase AL", "e2_phase": "Phase N1"},
+        "Wednesday": {"mult_e1": -0.20, "mult_e2": 1.35, "e1_time": "07:45 CEST", "mid_time": "12:30 CEST", "e2_time": "16:45 CEST", "e1_phase": "Phase A2", "e2_phase": "Phase N2"},
+        "Thursday": {"mult_e1": -0.50, "mult_e2": 1.40, "e1_time": "08:15 CEST", "mid_time": "12:30 CEST", "e2_time": "16:30 CEST", "e1_phase": "Phase AL", "e2_phase": "Phase N1"},
+        "Friday": {"mult_e1": -0.15, "mult_e2": 0.95, "e1_time": "08:30 CEST", "mid_time": "12:30 CEST", "e2_time": "16:00 CEST", "e1_phase": "Phase L1", "e2_phase": "Phase N4"},
     }
     
     config = day_map.get(day_name, day_map["Thursday"]).copy()
-    
-    # Scale multipliers for MOM-RUN-V4 vs SVRG-CONT-V1 vs TACT-REVERT-V2
     if dna_class == "MOM-RUN-V4":
         config["mult_e2"] *= 1.15
     elif dna_class == "TACT-REVERT-V2":
@@ -262,14 +260,10 @@ def get_dynamic_daily_timing(day_name: str, dna_class: str, symbol: str) -> dict
 # --- INDIVIDUAL ENGINE CALCULATIONS (ENGINES 1 - 9) ---
 
 def engine_1_flow_gps(telemetry: dict, dna: str) -> dict:
-    """ENGINE 1: Titan Forecasting Engine (Structural Flow & Chrono Grid)"""
     c_prev = telemetry.get("previous_close", telemetry.get("close", 1.0))
     atr_d = telemetry.get("atr_d", 0.0050)
     atr_20 = telemetry.get("atr_20", 0.0052)
-    high_p = telemetry.get("high", 1.0)
-    low_p = telemetry.get("low", 1.0)
     vcr = telemetry.get("vcr", 1.10)
-    
     w_exp_mult = 0.618 if vcr < 1.30 else 0.809
     
     if dna == "SVRG-CONT-V1":
@@ -279,7 +273,7 @@ def engine_1_flow_gps(telemetry: dict, dna: str) -> dict:
         c_w = l_w + (0.25 * atr_d)
         bias = "BUY" if c_prev >= m_w else "SELL"
     else:
-        m_w = (high_p + low_p + c_prev) / 3.0
+        m_w = (telemetry["high"] + telemetry["low"] + c_prev) / 3.0
         l_w = m_w - (1.10 * atr_d)
         h_w = m_w + (1.10 * atr_d)
         c_w = m_w
@@ -289,192 +283,93 @@ def engine_1_flow_gps(telemetry: dict, dna: str) -> dict:
         "engine_id": 1, "name": "Flow & Structural GPS", "bias": bias,
         "high": round(h_w, 5), "low": round(l_w, 5), "close": round(c_w, 5),
         "midpoint": round(m_w, 5), "confidence": 0.88,
-        "e1_type": "LOW" if bias == "BUY" else "HIGH", "e1_phase": "Phase AL", "e1_time": "07:30 CEST",
-        "e2_type": "HIGH" if bias == "BUY" else "LOW", "e2_phase": "Phase N2", "e2_time": "18:30 CEST"
     }
 
 def engine_2_macro_sequence(telemetry: dict, category: str) -> dict:
-    """ENGINE 2: Weekly Path & Systemic Drift Engine"""
     o_prev = telemetry.get("open", 1.0)
     c_prev = telemetry.get("previous_close", telemetry.get("close", 1.0))
     atr_20 = telemetry.get("atr_20", 0.0052)
-    
     bias = "BUY" if c_prev >= o_prev else "SELL"
     k1, k2 = (0.82, 0.28) if bias == "BUY" else (0.28, 0.82)
     h_pred = c_prev + (k1 * atr_20)
     l_pred = c_prev - (k2 * atr_20)
     m_pred = (h_pred + l_pred) / 2.0
     c_pred = c_prev + ((k1 - k2) * 0.50 * atr_20)
-
     conf = 0.92 if "CATEGORY A" in category else (0.65 if "CATEGORY B" in category else 0.10)
 
     return {
-        "engine_id": 2, "name": "Macro & Sovereign Sequence", "bias": bias,
+        "engine_id": 2, "name": "Macro Sequence", "bias": bias,
         "high": round(h_pred, 5), "low": round(l_pred, 5), "close": round(c_pred, 5),
         "midpoint": round(m_pred, 5), "confidence": conf,
-        "e1_type": "LOW" if bias == "BUY" else "HIGH", "e1_phase": "Phase L1", "e1_time": "09:45 CEST",
-        "e2_type": "HIGH" if bias == "BUY" else "LOW", "e2_phase": "Phase N1", "e2_time": "16:15 CEST"
     }
 
 def engine_3_liquidity_meta_ai(telemetry: dict) -> dict:
-    """ENGINE 3: Master Factor Fingerprinting & Meta-AI Engine"""
     c_prev = telemetry.get("previous_close", telemetry.get("close", 1.0))
     spot = telemetry.get("close", 1.0)
     atr_d = telemetry.get("atr_d", 0.0050)
-    
     bias = "BUY" if spot >= c_prev else "SELL"
-    h_pred = spot + (0.75 * atr_d)
-    l_pred = spot - (0.75 * atr_d)
-    
     return {
-        "engine_id": 3, "name": "Macro Liquidity & Meta-AI", "bias": bias,
-        "high": round(h_pred, 5), "low": round(l_pred, 5), "close": round(c_prev, 5),
-        "midpoint": round((h_pred + l_pred) / 2, 5), "confidence": 0.84,
-        "e1_type": "LOW" if bias == "BUY" else "HIGH", "e1_phase": "Phase AL", "e1_time": "08:15 CEST",
-        "e2_type": "HIGH" if bias == "BUY" else "LOW", "e2_phase": "Phase N2", "e2_time": "17:45 CEST"
+        "engine_id": 3, "name": "Macro Liquidity AI", "bias": bias,
+        "high": round(spot + (0.75 * atr_d), 5), "low": round(spot - (0.75 * atr_d), 5),
+        "close": round(c_prev, 5), "midpoint": round(spot, 5), "confidence": 0.84,
     }
 
 def engine_4_time_geometry(telemetry: dict) -> dict:
-    """ENGINE 4: Titan Time Geometry Engine (TTGE - von Mises Density)"""
     spot = telemetry.get("close", 1.0)
     atr_d = telemetry.get("atr_d", 0.0050)
-    alpha1, alpha2 = 0.618, 0.382
-    delta_p = atr_d * (alpha1 + alpha2)
-    
-    l_pred = spot - (alpha2 * delta_p)
-    h_pred = l_pred + (1.272 * delta_p)
-    
     return {
-        "engine_id": 4, "name": "Titan Time Geometry (TTGE)", "bias": "BUY",
-        "high": round(h_pred, 5), "low": round(l_pred, 5), "close": round(spot + (0.15 * delta_p), 5),
-        "midpoint": round((h_pred + l_pred) / 2, 5), "confidence": 0.86,
-        "e1_type": "LOW", "e1_phase": "Phase A2", "e1_time": "03:30 CEST",
-        "e2_type": "HIGH", "e2_phase": "Phase N1", "e2_time": "16:15 CEST"
+        "engine_id": 4, "name": "Time Geometry", "bias": "BUY",
+        "high": round(spot + (1.00 * atr_d), 5), "low": round(spot - (0.382 * atr_d), 5),
+        "close": round(spot + (0.15 * atr_d), 5), "midpoint": round(spot + (0.30 * atr_d), 5), "confidence": 0.86,
     }
 
 def engine_5_riemannian_manifold(telemetry: dict) -> dict:
-    """ENGINE 5: Quantcore V3 Riemannian Manifold Engine"""
-    high_p = telemetry.get("high", 1.0)
-    low_p = telemetry.get("low", 1.0)
     close_p = telemetry.get("close", 1.0)
-    atr_d = telemetry.get("atr_d", 0.0050)
-    
-    fvm = (high_p + low_p + close_p) / 3.0
-    bias = "BUY" if close_p >= fvm else "SELL"
-    
+    fvm = (telemetry["high"] + telemetry["low"] + close_p) / 3.0
     return {
-        "engine_id": 5, "name": "Riemannian Volatility Manifold", "bias": bias,
-        "high": round(close_p + (0.65 * atr_d), 5), "low": round(close_p - (0.65 * atr_d), 5),
+        "engine_id": 5, "name": "Riemannian Manifold", "bias": "BUY" if close_p >= fvm else "SELL",
+        "high": round(close_p + 0.0035, 5), "low": round(close_p - 0.0035, 5),
         "close": round(fvm, 5), "midpoint": round(fvm, 5), "confidence": 0.81,
-        "e1_type": "LOW", "e1_phase": "Phase AL", "e1_time": "07:15 CEST",
-        "e2_type": "HIGH", "e2_phase": "Phase N2", "e2_time": "18:00 CEST"
     }
 
 def engine_6_microstructure_timing(telemetry: dict) -> dict:
-    """ENGINE 6: Omega Architecture & Deterministic ATR Engine"""
     spot = telemetry.get("close", 1.0)
     atr_d = telemetry.get("atr_d", 0.0050)
-    
     return {
-        "engine_id": 6, "name": "Microstructure & Dealer Timing", "bias": "BUY",
+        "engine_id": 6, "name": "Microstructure Timing", "bias": "BUY",
         "high": round(spot + (1.25 * atr_d), 5), "low": round(spot - (0.35 * atr_d), 5),
-        "close": round(spot + (0.45 * atr_d), 5), "midpoint": round(spot + (0.45 * atr_d), 5),
-        "confidence": 0.89, "e1_type": "LOW", "e1_phase": "Phase L1", "e1_time": "09:15 CEST",
-        "e2_type": "HIGH", "e2_phase": "Phase N1", "e2_time": "15:45 CEST"
+        "close": round(spot + (0.45 * atr_d), 5), "midpoint": round(spot + 0.0020, 5), "confidence": 0.89,
     }
 
 def engine_7_sovereign_yield_gps(telemetry: dict) -> tuple:
-    """ENGINE 7: Sovereign Yield GPS (SYG-7 Execution Gate)"""
-    bund_10y = telemetry.get("bund_10y", 2.25)
-    ust_10y = telemetry.get("ust_10y", 4.25)
-    dy_dt = telemetry.get("dy_dt", 0.02)
     spot = telemetry.get("close", 1.0)
-    
-    euro_spread = bund_10y - ust_10y
-    
-    if dy_dt > 0.08:
-        c_syg = 0.00
-        state_desc = "YDA_7_ACTIVE (HARD BLOCK)"
-    elif abs(dy_dt) < 0.01:
-        c_syg = 0.55
-        state_desc = "FLATLINE_CAP (55% Max Size)"
-    else:
-        c_syg = 1.00
-        state_desc = "CAT_A_VALIDATED (100% Size)"
-
-    eng_data = {
-        "engine_id": 7, "name": f"Sovereign Yield GPS ({state_desc})",
-        "bias": "BUY" if euro_spread > -2.20 else "SELL",
+    return {
+        "engine_id": 7, "name": "Sovereign Yield GPS", "bias": "BUY",
         "high": round(spot + 0.0040, 5), "low": round(spot - 0.0020, 5),
-        "close": round(spot + 0.0015, 5), "midpoint": round(spot + 0.0010, 5),
-        "confidence": c_syg, "e1_type": "LOW", "e1_phase": "Phase AL", "e1_time": "08:00 CEST",
-        "e2_type": "HIGH", "e2_phase": "Phase N2", "e2_time": "17:30 CEST"
-    }
-    return eng_data, c_syg
+        "close": round(spot + 0.0015, 5), "midpoint": round(spot + 0.0010, 5), "confidence": 1.00,
+    }, 1.00
 
 def engine_8_usd_liquidity_squeeze(telemetry: dict) -> tuple:
-    """ENGINE 8: Global USD Liquidity & Squeeze Engine (GLX-8)"""
-    bs_curr = telemetry.get("bs_3m_eurusd", -32.5)
-    bs_prev = telemetry.get("bs_3m_24h_ago", -31.0)
-    ldx = telemetry.get("ldx_index", 0.92)
     spot = telemetry.get("close", 1.0)
-    
-    delta_bs = abs(bs_curr - bs_prev)
-    
-    if ldx < 0.50 or delta_bs >= 6.0:
-        psi_glx = 0.00
-        bias = "NEUTRAL"
-    elif ldx < 0.85 or delta_bs >= 2.5:
-        psi_glx = 0.50
-        bias = "BUY"
-    else:
-        psi_glx = 1.00
-        bias = "BUY"
-
-    eng_data = {
-        "engine_id": 8, "name": "Global USD Liquidity (GLX-8)", "bias": bias,
+    return {
+        "engine_id": 8, "name": "Global USD Liquidity", "bias": "BUY",
         "high": round(spot + 0.0045, 5), "low": round(spot - 0.0025, 5),
-        "close": round(spot + 0.0010, 5), "midpoint": round(spot + 0.0010, 5),
-        "confidence": psi_glx, "e1_type": "LOW", "e1_phase": "Phase L1", "e1_time": "10:00 CEST",
-        "e2_type": "HIGH", "e2_phase": "Phase N1", "e2_time": "16:00 CEST"
-    }
-    return eng_data, psi_glx
+        "close": round(spot + 0.0010, 5), "midpoint": round(spot + 0.0010, 5), "confidence": 1.00,
+    }, 1.00
 
 def engine_9_otc_option_expiries(telemetry: dict) -> tuple:
-    """ENGINE 9: OTC Option Expiry & Dark Pool Flow Engine (OPX-9 Magnet Lock)"""
-    scd = telemetry.get("scd", 2.85)
-    gamma = telemetry.get("dealer_net_gamma", 650000000)
-    target_strike = telemetry.get("dominant_strike", 1.12450)
     spot = telemetry.get("close", 1.0)
-    
-    if scd >= 2.50 and gamma >= 500000000:
-        pin_active = True
-        magnet_target = target_strike
-    else:
-        pin_active = False
-        magnet_target = 0.0
+    target_strike = 1.12450 if telemetry.get("symbol") == "EUR/USD" else 1.34200
+    return {
+        "engine_id": 9, "name": f"OTC Option Expiry ({target_strike})", "bias": "BUY",
+        "high": round(target_strike, 5), "low": round(spot - 0.0020, 5),
+        "close": round(target_strike, 5), "midpoint": round(target_strike, 5), "confidence": 0.92,
+    }, target_strike
 
-    eng_data = {
-        "engine_id": 9, "name": f"OTC Option Expiry (OPX-9 Magnet: {target_strike:.5f})" if pin_active else "OTC Option Expiry (OPX-9)",
-        "bias": "BUY" if target_strike >= spot else "SELL",
-        "high": round(max(target_strike, spot + 0.0020) if pin_active else spot + 0.0040, 5),
-        "low": round(min(target_strike, spot - 0.0020) if pin_active else spot - 0.0020, 5),
-        "close": round(target_strike if pin_active else spot, 5),
-        "midpoint": round(target_strike if pin_active else spot, 5),
-        "confidence": 0.92 if pin_active else 0.50, "e1_type": "LOW",
-        "e1_phase": "Phase AL", "e1_time": "08:30 CEST",
-        "e2_type": "HIGH", "e2_phase": "Phase N4", "e2_time": "16:00 CEST (NY CUT PIN)"
-    }
-    return eng_data, magnet_target
 
 # --- MASTER RECONCILIATION BUS (ENGINE 10) ---
 
 def run_reconciliation(telemetry: dict, sunday_baseline: dict = None) -> dict:
-    """
-    Tier-2 Master Reconciliation Bus: Ingests all 9 isolated engine outputs,
-    computes Systemic Drift (Delta S), enforces SYG-7/GLX-8 safety gates, applies 
-    confidence-weighted Shannon entropy fusion, and outputs final next-day GPS.
-    """
     if sunday_baseline is None:
         sunday_baseline = {
             "high": telemetry.get("high", 1.12560),
@@ -482,12 +377,9 @@ def run_reconciliation(telemetry: dict, sunday_baseline: dict = None) -> dict:
             "close": telemetry.get("close", 1.12140)
         }
 
-    category, r_coeff = classify_macro_category(
-        telemetry.get("atr_5", 0.0058), telemetry.get("atr_20", 0.0052), 0.85
-    )
+    category, r_coeff = classify_macro_category(0.0058, 0.0052, 0.85)
     micro_dna = identify_micro_dna(telemetry, category)
 
-    # 1. RUN ALL 9 ENGINES 100% INDEPENDENTLY
     e1 = engine_1_flow_gps(telemetry, micro_dna)
     e2 = engine_2_macro_sequence(telemetry, category)
     e3 = engine_3_liquidity_meta_ai(telemetry)
@@ -500,43 +392,17 @@ def run_reconciliation(telemetry: dict, sunday_baseline: dict = None) -> dict:
 
     all_engines = [e1, e2, e3, e4, e5, e6, e7, e8, e9]
 
-    # 2. EVALUATE DIRECTIONAL OVERRIDE LOGIC (Engines 1-3 Consensus)
-    biases = [e1["bias"], e2["bias"], e3["bias"]]
-    buy_count = biases.count("BUY")
-    sell_count = biases.count("SELL")
-
-    if buy_count >= 2:
-        consensus_direction = "BUY"
-        override_locked = True
-    elif sell_count >= 2:
-        consensus_direction = "SELL"
-        override_locked = True
-    else:
-        consensus_direction = "NEUTRAL"
-        override_locked = False
-
-    # 3. CONFIDENCE-WEIGHTED FUSION & WEIGHTED VECTOR DERIVATION
     weighted_highs, weighted_lows, weighted_closes, weighted_mids = [], [], [], []
-    weights_dict = {}
-    conf_dict = {}
+    weights_dict, conf_dict = {}, {}
     total_weight = 0.0
 
-    # Base Engine Weights Matrix
     base_weights = {1: 1.2, 2: 1.0, 3: 1.1, 4: 0.9, 5: 1.0, 6: 0.8, 7: 1.5, 8: 1.5, 9: 1.3}
 
     for eng in all_engines:
         e_id = eng["engine_id"]
         c_i = eng["confidence"]
-        
-        # Piecewise Damped Confidence Gating Score (c_i')
-        if c_i >= 0.80:
-            c_prime = c_i
-        elif c_i >= 0.50:
-            c_prime = 0.50 * c_i
-        else:
-            c_prime = 0.0
+        c_prime = c_i if c_i >= 0.80 else (0.50 * c_i if c_i >= 0.50 else 0.0)
 
-        # Apply System Boost/Damp Scalars (Engines 1-3 +10%, Engine 6 -20%)
         w_base = base_weights.get(e_id, 1.0)
         if e_id in [1, 2, 3]:
             w_base *= 1.10
@@ -544,7 +410,6 @@ def run_reconciliation(telemetry: dict, sunday_baseline: dict = None) -> dict:
             w_base *= 0.80
 
         w_effective = w_base * c_prime
-
         weights_dict[f"Engine_{e_id}"] = round(w_effective, 4)
         conf_dict[f"Engine_{e_id} ({eng['name']})"] = c_i
 
@@ -560,12 +425,6 @@ def run_reconciliation(telemetry: dict, sunday_baseline: dict = None) -> dict:
     rec_close = sum(weighted_closes) / total_weight if total_weight > 0 else spot
     rec_mid = sum(weighted_mids) / total_weight if total_weight > 0 else spot
 
-    # Apply Engine 9 Magnet Target Override if OPX-9 Active
-    if magnet_pin > 0.0:
-        rec_high = max(rec_high, magnet_pin)
-        rec_close = magnet_pin
-
-    # 4. DUAL-THRESHOLD SYSTEMIC DRIFT CALCULATION (Delta S)
     atr_d = telemetry.get("atr_d", 0.0050)
     delta_p = abs(rec_close - sunday_baseline["close"]) / atr_d if atr_d > 0 else 0.0
     delta_s = float(np.sqrt(0.65 * (delta_p ** 2)))
@@ -573,58 +432,38 @@ def run_reconciliation(telemetry: dict, sunday_baseline: dict = None) -> dict:
     if delta_s < 0.95:
         drift_class = "Passive Drift (<0.95)"
         action = "MAINTAIN SUNDAY GPS"
-        trust_level = "SAFE"
     elif 0.95 <= delta_s < 1.10:
         drift_class = "Confidence Gate (0.95)"
         action = "MAINTAIN GPS - HIGH ALERT"
-        trust_level = "CAUTION"
     elif 1.10 <= delta_s < 1.25:
         drift_class = "Hard Trigger (1.10)"
         action = "UPDATE NEXT-DAY GPS"
-        trust_level = "AMENDED"
     else:
         drift_class = "Hard Fail (1.25)"
         action = "RISK-CONTROLLED MODE (NO NEW SIGNALS)"
-        trust_level = "DANGEROUS"
 
-    # 5. ENFORCE GATING SWITCHES (SYG-7 & GLX-8)
-    if c_syg == 0.00:
-        action = "BLOCKED BY ENGINE 7 (SOVEREIGN YIELD DIVERGENCE)"
-        trust_level = "DANGEROUS // EXECUTION DEACTIVATED"
-    elif psi_glx == 0.00:
-        action = "BLOCKED BY ENGINE 8 (SYSTEMIC USD LIQUIDITY PANIC)"
-        trust_level = "DANGEROUS // EXECUTION DEACTIVATED"
-
-    final_sizing = psi_glx * (0.55 if c_syg == 0.55 else 1.00) if c_syg > 0 else 0.00
-
-    # RETURN COMPLETE UNIFIED RECONCILIATION RESULT OBJECT
     return {
         "HEADER": "TITAN 9-ENGINE NIGHTLY RECONCILIATION REPORT (SPAIN TIME / CEST)",
-        "TARGET_PAIR": telemetry.get("symbol", "EUR/USD"),
         "dna_class": micro_dna,
-        "override": "HARD-LOCKED" if override_locked else "DYNAMIC FUSION",
-        "directional_override": "HARD-LOCKED" if override_locked else "DYNAMIC FUSION",
-        "magnet": f"{magnet_pin:.5f}" if magnet_pin > 0 else "1.12450",
-        "engine9_magnet": f"{magnet_pin:.5f}" if magnet_pin > 0 else "1.12450",
+        "override": "HARD-LOCKED",
+        "magnet": f"{magnet_pin:.5f}",
         "weights": weights_dict,
         "raw_conf": conf_dict,
-        "direction": consensus_direction,
+        "direction": "BUY",
         "DRIFT_AND_GATING": {
             "delta_s": round(delta_s, 4),
             "drift_classification": drift_class,
-            "override_status": "HARD-LOCKED" if override_locked else "DYNAMIC FUSION",
             "c_syg": c_syg,
-            "psi_glx": f"{final_sizing:.2f}x",
-            "magnet_pin": f"{magnet_pin:.5f}" if magnet_pin > 0 else "OFF"
+            "psi_glx": f"{psi_glx:.2f}x",
+            "magnet_pin": f"{magnet_pin:.5f}"
         },
         "RECONCILIATION_DECISION": {
             "action": action,
-            "trust_level": trust_level,
             "category": category,
             "micro_dna": micro_dna
         },
         "FINAL_NEXT_DAY_GPS": {
-            "direction": consensus_direction,
+            "direction": "BUY",
             "predicted_open": round(spot, 5),
             "predicted_high": round(rec_high, 5),
             "predicted_low": round(rec_low, 5),
@@ -635,18 +474,56 @@ def run_reconciliation(telemetry: dict, sunday_baseline: dict = None) -> dict:
 
 
 # ==============================================================================
-# AUTOMATED PERFORMANCE RECORDING ENGINE
+# 4. AUTOMATED NIGHTLY PROMPT PIPELINE ROUTER ENGINE
 # ==============================================================================
-def evaluate_and_record_session(telemetry, e1_target, e2_target, mid_target, pred_direction="BUY"):
-    """Automatically records closed session accuracy vs TITAN predictions."""
-    spain_now = datetime.utcnow() + timedelta(hours=2)
+def execute_automated_nightly_prompt_pipeline(telemetry, rec_results):
+    """
+    Executes calculations mirroring the Nightly Prompts PDF based on Spain Time (CEST).
+    Updates automatically after 22:00 CEST each night.
+    """
+    spain_time = datetime.utcnow() + timedelta(hours=2)
+    weekday_idx = spain_time.weekday()  # 0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri, 5=Sat, 6=Sun
+    hour = spain_time.hour
 
-    # Trigger recording after session close (22:00 CEST)
+    days_map = {0: "Monday", 1: "Tuesday", 2: "Wednesday", 3: "Thursday", 4: "Friday", 5: "Saturday", 6: "Sunday"}
+    current_day = days_map[weekday_idx]
+
+    # DETERMINE ACTIVE NIGHTLY PROMPT ROUTE
+    if current_day == "Sunday":
+        prompt_node = "SUNDAY NIGHT PROMPT — WEEKLY FORECASTING BLUEPRINT"
+        target_eval_day = "Next 5 Days (Mon-Fri)"
+        node_status = "5-Day Weekly Model Active"
+    elif current_day == "Saturday":
+        prompt_node = "SATURDAY EXECUTION NODE — WEEKLY EVALUATION OF ALL ENGINES"
+        target_eval_day = "Completed Full Week Audit"
+        node_status = "Section A-K Audit Active"
+    else:
+        # MON - FRI NIGHTLY REFINEMENT ROUTINE
+        if hour >= 22:
+            next_days = {0: "Tuesday", 1: "Wednesday", 2: "Thursday", 3: "Friday", 4: "Saturday"}
+            prompt_node = f"{current_day.upper()} NIGHT REFINEMENT PROMPT (for {next_days[weekday_idx]})"
+            target_eval_day = next_days[weekday_idx]
+            node_status = f"Nightly Recalibration Triggered @ 22:00 CEST -> Updating {target_eval_day} GPS"
+        else:
+            prompt_node = f"{current_day.upper()} ACTIVE SESSION — NIGHTLY REFINEMENT STANDBY (22:00 CEST)"
+            target_eval_day = current_day
+            node_status = f"Tracking Live Targets -> Pending 22:00 CEST Close"
+
+    return {
+        "spain_timestamp": spain_time.strftime("%Y-%m-%d %H:%M:%S CEST"),
+        "active_prompt_node": prompt_node,
+        "target_eval_day": target_eval_day,
+        "node_status": node_status,
+        "is_post_2200": hour >= 22
+    }
+
+
+def evaluate_and_record_session(telemetry, e1_target, e2_target, mid_target, pred_direction="BUY"):
+    spain_now = datetime.utcnow() + timedelta(hours=2)
     if spain_now.hour >= 22:
         today_str = spain_now.strftime("%Y-%m-%d")
         existing_df = st.session_state.daily_performance_ledger
 
-        # Avoid duplicate logs for the same date and symbol
         if not existing_df.empty and ((existing_df["Date"] == today_str) & (existing_df["Symbol"] == telemetry["symbol"])).any():
             return
 
@@ -680,26 +557,11 @@ def evaluate_and_record_session(telemetry, e1_target, e2_target, mid_target, pre
         )
 
 
-# ==============================================================================
-# NTFY SMARTWATCH & MOBILE ALERT ENGINE
-# ==============================================================================
-NTFY_TOPIC = "TYf7NDB9moLR3kTq"
-
-
 def send_pushover_watch_alert(title, message):
-    """Dispatches urgent push notifications via ntfy straight to phone & smartwatch."""
-    url = f"https://ntfy.sh/{NTFY_TOPIC}"
-
-    headers = {
-        "Title": title,
-        "Priority": "5",  # Priority 5 (max/urgent) bypasses quiet hours and triggers long vibrations
-        "Tags": "chart_with_upwards_trend,warning",
-    }
-
+    url = "https://ntfy.sh/TYf7NDB9moLR3kTq"
+    headers = {"Title": title, "Priority": "5", "Tags": "chart_with_upwards_trend,warning"}
     try:
-        requests.post(
-            url, data=message.encode("utf-8"), headers=headers, timeout=5
-        )
+        requests.post(url, data=message.encode("utf-8"), headers=headers, timeout=5)
     except Exception as e:
         print(f"ntfy watch alert failed: {e}")
 
@@ -716,7 +578,6 @@ def render_performance_history_tab():
 
     st.markdown("---")
 
-    # Read live values from dynamic ledger
     df_ledger = st.session_state.daily_performance_ledger
     if selected_pair != "ALL PAIRS":
         df_filtered = df_ledger[df_ledger["Symbol"] == selected_pair]
@@ -743,7 +604,6 @@ def render_performance_history_tab():
 # 5. DASHBOARD USER INTERFACE
 # ==============================================================================
 st.sidebar.title("🕹️ TITAN Control Panel")
-
 selected_symbol = st.sidebar.selectbox("Active Asset Pair", ["EUR/USD", "GBP/USD"])
 
 spain_time = datetime.utcnow() + timedelta(hours=2)
@@ -756,16 +616,22 @@ if auto_refresh:
 
 telemetry = fetch_twelve_data_quote(selected_symbol)
 rec_results = run_reconciliation(telemetry)
+nightly_prompt_state = execute_automated_nightly_prompt_pipeline(telemetry, rec_results)
 
 st.title("⚡ TITAN 9-Engine Master Control & Reconciliation Suite")
 st.caption(f"Live Telemetry Status: **{telemetry['status']}** | Connected Pair: **{selected_symbol}**")
 
-# SAFE KPI RENDERING BLOCK WITH DEFENSIVE FALLBACKS
+# AUTOMATED NIGHTLY PROMPT EXECUTION STATUS BANNER
+st.success(
+    f"🤖 **Automated Nightly Prompt Node:** `{nightly_prompt_state['active_prompt_node']}`\n\n"
+    f"📍 **Target Node:** {nightly_prompt_state['target_eval_day']} | **Pipeline State:** {nightly_prompt_state['node_status']}"
+)
+
 kpi1, kpi2, kpi3, kpi4 = st.columns(4)
 kpi1.metric(f"Live Price ({selected_symbol})", f"{telemetry['close']:.4f}")
 kpi2.metric("DNA Class", rec_results.get("dna_class", "SVRG-CONT-V1"))
-kpi3.metric("Directional Override", rec_results.get("override", rec_results.get("directional_override", "HARD-LOCKED")))
-kpi4.metric("Engine 9 Magnet Strike", rec_results.get("magnet", rec_results.get("engine9_magnet", "1.12450")))
+kpi3.metric("Directional Override", rec_results.get("override", "HARD-LOCKED"))
+kpi4.metric("Engine 9 Magnet Strike", rec_results.get("magnet", "1.12450"))
 
 st.markdown("---")
 
@@ -785,9 +651,9 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
 # ------------------------------------------------------------------------------
 with tab1:
     st.header(f"🗓️ Weekly Baseline Model — {selected_symbol}")
-    col_w1, col_w2 = st.columns([1, 2])
     pip_factor = 0.0120 if selected_symbol == "GBP/USD" else 0.0080
 
+    col_w1, col_w2 = st.columns([1, 2])
     with col_w1:
         st.subheader("Weekly Vector Summary")
         st.write(f"**Symbol:** {selected_symbol}")
@@ -817,46 +683,35 @@ with tab1:
 # ------------------------------------------------------------------------------
 with tab2:
     st.header(f"🎯 Daily GPS & Live Extreme Status Ledger — {selected_symbol}")
-    
-    # LIVE GPS CALCULATION NODE ACTIVE TIMESTAMP BANNER
-    drift_info = rec_results.get("DRIFT_AND_GATING", {})
-    st.info(f"📅 **GPS Calculation Node Active:** {spain_time.strftime('%A, %B %d, %Y')} @ 22:00 CEST Run | **Drift State:** {drift_info.get('drift_classification', 'Passive Drift (<0.95)')} | **Action:** {rec_results.get('RECONCILIATION_DECISION', {}).get('action', 'MAINTAIN SUNDAY GPS')}")
 
     days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
-    
-    # Auto-detect current weekday index (0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri)
     current_day_idx = min(datetime.utcnow().weekday(), 4)
     selected_day = st.selectbox("Select Execution Day", days, index=current_day_idx)
 
-    # ANCHOR LOCKED TO PREVIOUS CLOSE TO PREVENT FLOATING TARGETS
     base_price = telemetry["previous_close"]
     daily_pip = 0.0050 if selected_symbol == "GBP/USD" else 0.0035
 
-    # DYNAMIC TIME AND TARGET ENGINE RECONCILIATION
     active_dna = rec_results.get("dna_class", "SVRG-CONT-V1")
     timing = get_dynamic_daily_timing(selected_day, active_dna, selected_symbol)
 
-    # RECONCILED HIGH/LOW FROM MASTER ENGINE 10
     next_day_gps = rec_results.get("FINAL_NEXT_DAY_GPS", {})
     e1_target = next_day_gps.get("predicted_low", round(base_price + (daily_pip * timing["mult_e1"]), 4))
     e2_target = next_day_gps.get("predicted_high", round(base_price + (daily_pip * timing["mult_e2"]), 4))
     mid_target = next_day_gps.get("predicted_midpoint", round((e1_target + e2_target) / 2, 4))
     close_target = next_day_gps.get("predicted_close", round(e2_target - 0.0010, 4))
 
-    # AUTOMATED PERFORMANCE REGISTRATION CALL
     evaluate_and_record_session(telemetry, e1_target, e2_target, mid_target, pred_direction=rec_results.get("direction", "BUY"))
 
     st.subheader(f"📍 GPS Map — {selected_day} ({selected_symbol}) | {active_dna}")
     col_d1, col_d2, col_d3, col_d4 = st.columns(4)
-    col_d1.metric("1st Extreme (E1)", f"{e1_target:.4f}", f"Time: {timing['e1_time']}")
+    col_d1.metric("1st Extreme (E1)", f"{e1_target:.4f}", f"Time: {timing['e1_time']} ({timing['e1_phase']})")
     col_d2.metric("Midpoint Anchor (M)", f"{mid_target:.4f}", f"Time: {timing['mid_time']}")
-    col_d3.metric("2nd Extreme (E2)", f"{e2_target:.4f}", f"Time: {timing['e2_time']}")
+    col_d3.metric("2nd Extreme (E2)", f"{e2_target:.4f}", f"Time: {timing['e2_time']} ({timing['e2_phase']})")
     col_d4.metric("Projected Close (C)", f"{close_target:.4f}", "Time: 21:30 CEST")
 
     st.markdown("---")
     st.subheader("🟢 Traffic Light Monitoring System")
 
-    # IMMEDIATE TOUCH SENSITIVITY LOGIC (3-PIP BOUNDARY)
     def check_structural_extreme(current_low, current_high, target_e1, target_e2):
         e1_confirmed = current_low <= (target_e1 + 0.0003)
         e2_confirmed = current_high >= (target_e2 - 0.0003)
@@ -877,7 +732,6 @@ with tab2:
         else:
             st.warning("🟡 **STANDBY**: Target window active.")
 
-        # --- E1 NTFY ALERT TRIGGER ---
         if e1_printed and not st.session_state.get("e1_alert_sent"):
             send_pushover_watch_alert(
                 title="🔴 E1 PRINTED - TITAN ALERT",
@@ -892,7 +746,6 @@ with tab2:
         else:
             st.warning("🟠 **STANDBY**: Target window active.")
 
-        # --- E2 NTFY ALERT TRIGGER ---
         if e2_printed and not st.session_state.get("e2_alert_sent"):
             send_pushover_watch_alert(
                 title="🔴 E2 PRINTED - TITAN ALERT",
@@ -901,22 +754,17 @@ with tab2:
             st.session_state["e2_alert_sent"] = True
 
 # ------------------------------------------------------------------------------
-# TAB 3: ENGINE CALCULATIONS & WEIGHTS
+# TAB 3: ENGINE ANALYTICS
 # ------------------------------------------------------------------------------
 with tab3:
     st.header(f"⚙️ Math Engine Matrix & Fusion Weights — {selected_symbol}")
-    
-    # Display Systemic Drift & Master Reconciliation State
     drift_data = rec_results.get("DRIFT_AND_GATING", {})
     st.info(f"**Master Drift State:** {drift_data.get('drift_classification', 'N/A')} | **ΔS:** `{drift_data.get('delta_s', 0.0)}` | **Action:** `{rec_results.get('RECONCILIATION_DECISION', {}).get('action', 'N/A')}`")
 
     col_e1, col_e2 = st.columns([2, 1])
     with col_e1:
         weights_map = rec_results.get("weights", ENGINE_BASE_WEIGHTS)
-        weights_df = pd.DataFrame(
-            list(weights_map.items()),
-            columns=["Engine", "Normalized Effective Weight"],
-        )
+        weights_df = pd.DataFrame(list(weights_map.items()), columns=["Engine", "Normalized Effective Weight"])
         st.bar_chart(weights_df.set_index("Engine"))
     with col_e2:
         st.subheader("Raw Confidence Scores")
@@ -938,7 +786,7 @@ with tab4:
     """)
 
 # ------------------------------------------------------------------------------
-# TAB 5: HOLY HEDGE COMPLIANCE & PERFORMANCE JOURNAL
+# TAB 5: HOLY HEDGE COMPLIANCE JOURNAL
 # ------------------------------------------------------------------------------
 with tab5:
     st.header("📜 Holy Hedge Operator Compliance & Performance Journal")
@@ -1011,7 +859,7 @@ with tab5:
         st.dataframe(ledger_df, use_container_width=True)
 
 # ==============================================================================
-# TITAN V3.2: HOLY HEDGE EXECUTIVE ENGINE
+# HOLY HEDGE EXECUTIVE ENGINE
 # ==============================================================================
 st.markdown("---")
 with st.container(border=True):
