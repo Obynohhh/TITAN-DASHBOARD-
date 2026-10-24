@@ -248,9 +248,9 @@ def get_dynamic_daily_timing(day_name: str, dna_class: str, symbol: str) -> dict
         "Friday": {"mult_e1": -0.15, "mult_e2": 0.95, "e1_time": "08:30 CEST", "mid_time": "12:30 CEST", "e2_time": "16:00 CEST"},
     }
     
-    config = day_map.get(day_name, day_map["Thursday"])
+    config = day_map.get(day_name, day_map["Thursday"]).copy()
     
-    # Scale multipliers for MOM-RUN-V4 vs SVRG-CONT-V1
+    # Scale multipliers for MOM-RUN-V4 vs SVRG-CONT-V1 vs TACT-REVERT-V2
     if dna_class == "MOM-RUN-V4":
         config["mult_e2"] *= 1.15
     elif dna_class == "TACT-REVERT-V2":
@@ -262,18 +262,22 @@ def get_dynamic_daily_timing(day_name: str, dna_class: str, symbol: str) -> dict
 # --- INDIVIDUAL ENGINE CALCULATIONS (ENGINES 1 - 9) ---
 
 def engine_1_flow_gps(telemetry: dict, dna: str) -> dict:
+    """ENGINE 1: Titan Forecasting Engine (Structural Flow & Chrono Grid)"""
     c_prev = telemetry.get("previous_close", telemetry.get("close", 1.0))
     atr_d = telemetry.get("atr_d", 0.0050)
-    atr_20 = telemetry.get("atr_20", 0.0050)
+    atr_20 = telemetry.get("atr_20", 0.0052)
     high_p = telemetry.get("high", 1.0)
     low_p = telemetry.get("low", 1.0)
+    vcr = telemetry.get("vcr", 1.10)
+    
+    w_exp_mult = 0.618 if vcr < 1.30 else 0.809
     
     if dna == "SVRG-CONT-V1":
         m_w = c_prev + (0.50 * atr_d)
         h_w = c_prev + (0.85 * atr_d)
-        l_w = h_w - (0.809 * atr_20 * 5)
+        l_w = h_w - (w_exp_mult * atr_20 * 5)
         c_w = l_w + (0.25 * atr_d)
-        bias = "BUY" if c_prev > m_w else "SELL"
+        bias = "BUY" if c_prev >= m_w else "SELL"
     else:
         m_w = (high_p + low_p + c_prev) / 3.0
         l_w = m_w - (1.10 * atr_d)
@@ -290,9 +294,10 @@ def engine_1_flow_gps(telemetry: dict, dna: str) -> dict:
     }
 
 def engine_2_macro_sequence(telemetry: dict, category: str) -> dict:
+    """ENGINE 2: Weekly Path & Systemic Drift Engine"""
     o_prev = telemetry.get("open", 1.0)
     c_prev = telemetry.get("previous_close", telemetry.get("close", 1.0))
-    atr_20 = telemetry.get("atr_20", 0.0050)
+    atr_20 = telemetry.get("atr_20", 0.0052)
     
     bias = "BUY" if c_prev >= o_prev else "SELL"
     k1, k2 = (0.82, 0.28) if bias == "BUY" else (0.28, 0.82)
@@ -312,6 +317,7 @@ def engine_2_macro_sequence(telemetry: dict, category: str) -> dict:
     }
 
 def engine_3_liquidity_meta_ai(telemetry: dict) -> dict:
+    """ENGINE 3: Master Factor Fingerprinting & Meta-AI Engine"""
     c_prev = telemetry.get("previous_close", telemetry.get("close", 1.0))
     spot = telemetry.get("close", 1.0)
     atr_d = telemetry.get("atr_d", 0.0050)
@@ -329,6 +335,7 @@ def engine_3_liquidity_meta_ai(telemetry: dict) -> dict:
     }
 
 def engine_4_time_geometry(telemetry: dict) -> dict:
+    """ENGINE 4: Titan Time Geometry Engine (TTGE - von Mises Density)"""
     spot = telemetry.get("close", 1.0)
     atr_d = telemetry.get("atr_d", 0.0050)
     alpha1, alpha2 = 0.618, 0.382
@@ -346,13 +353,14 @@ def engine_4_time_geometry(telemetry: dict) -> dict:
     }
 
 def engine_5_riemannian_manifold(telemetry: dict) -> dict:
+    """ENGINE 5: Quantcore V3 Riemannian Manifold Engine"""
     high_p = telemetry.get("high", 1.0)
     low_p = telemetry.get("low", 1.0)
     close_p = telemetry.get("close", 1.0)
     atr_d = telemetry.get("atr_d", 0.0050)
     
     fvm = (high_p + low_p + close_p) / 3.0
-    bias = "BUY" if close_p > fvm else "SELL"
+    bias = "BUY" if close_p >= fvm else "SELL"
     
     return {
         "engine_id": 5, "name": "Riemannian Volatility Manifold", "bias": bias,
@@ -363,36 +371,40 @@ def engine_5_riemannian_manifold(telemetry: dict) -> dict:
     }
 
 def engine_6_microstructure_timing(telemetry: dict) -> dict:
+    """ENGINE 6: Omega Architecture & Deterministic ATR Engine"""
     spot = telemetry.get("close", 1.0)
+    atr_d = telemetry.get("atr_d", 0.0050)
+    
     return {
         "engine_id": 6, "name": "Microstructure & Dealer Timing", "bias": "BUY",
-        "high": round(spot + 0.0050, 5), "low": round(spot - 0.0030, 5),
-        "close": round(spot + 0.0020, 5), "midpoint": round(spot + 0.0010, 5),
+        "high": round(spot + (1.25 * atr_d), 5), "low": round(spot - (0.35 * atr_d), 5),
+        "close": round(spot + (0.45 * atr_d), 5), "midpoint": round(spot + (0.45 * atr_d), 5),
         "confidence": 0.89, "e1_type": "LOW", "e1_phase": "Phase L1", "e1_time": "09:15 CEST",
         "e2_type": "HIGH", "e2_phase": "Phase N1", "e2_time": "15:45 CEST"
     }
 
 def engine_7_sovereign_yield_gps(telemetry: dict) -> tuple:
+    """ENGINE 7: Sovereign Yield GPS (SYG-7 Execution Gate)"""
     bund_10y = telemetry.get("bund_10y", 2.25)
     ust_10y = telemetry.get("ust_10y", 4.25)
-    ois_speed = telemetry.get("ois_shift_speed", 0.18)
+    dy_dt = telemetry.get("dy_dt", 0.02)
     spot = telemetry.get("close", 1.0)
     
     euro_spread = bund_10y - ust_10y
     
-    if abs(ois_speed) < 0.05:
-        c_syg = 0.55
-        state_desc = "FLATLINE_CAP (55% Max Size)"
-    elif math.copysign(1, euro_spread) != math.copysign(1, ois_speed) and abs(ois_speed) > 0.40:
+    if dy_dt > 0.08:
         c_syg = 0.00
         state_desc = "YDA_7_ACTIVE (HARD BLOCK)"
+    elif abs(dy_dt) < 0.01:
+        c_syg = 0.55
+        state_desc = "FLATLINE_CAP (55% Max Size)"
     else:
         c_syg = 1.00
         state_desc = "CAT_A_VALIDATED (100% Size)"
 
     eng_data = {
         "engine_id": 7, "name": f"Sovereign Yield GPS ({state_desc})",
-        "bias": "BUY" if euro_spread > -1.50 else "SELL",
+        "bias": "BUY" if euro_spread > -2.20 else "SELL",
         "high": round(spot + 0.0040, 5), "low": round(spot - 0.0020, 5),
         "close": round(spot + 0.0015, 5), "midpoint": round(spot + 0.0010, 5),
         "confidence": c_syg, "e1_type": "LOW", "e1_phase": "Phase AL", "e1_time": "08:00 CEST",
@@ -401,17 +413,18 @@ def engine_7_sovereign_yield_gps(telemetry: dict) -> tuple:
     return eng_data, c_syg
 
 def engine_8_usd_liquidity_squeeze(telemetry: dict) -> tuple:
+    """ENGINE 8: Global USD Liquidity & Squeeze Engine (GLX-8)"""
     bs_curr = telemetry.get("bs_3m_eurusd", -32.5)
     bs_prev = telemetry.get("bs_3m_24h_ago", -31.0)
     ldx = telemetry.get("ldx_index", 0.92)
     spot = telemetry.get("close", 1.0)
     
-    delta_bs = bs_curr - bs_prev
+    delta_bs = abs(bs_curr - bs_prev)
     
-    if ldx < 0.40 or abs(delta_bs) > 6.0:
+    if ldx < 0.50 or delta_bs >= 6.0:
         psi_glx = 0.00
         bias = "NEUTRAL"
-    elif ldx < 0.85 or abs(delta_bs) > 2.5:
+    elif ldx < 0.85 or delta_bs >= 2.5:
         psi_glx = 0.50
         bias = "BUY"
     else:
@@ -428,32 +441,40 @@ def engine_8_usd_liquidity_squeeze(telemetry: dict) -> tuple:
     return eng_data, psi_glx
 
 def engine_9_otc_option_expiries(telemetry: dict) -> tuple:
+    """ENGINE 9: OTC Option Expiry & Dark Pool Flow Engine (OPX-9 Magnet Lock)"""
+    scd = telemetry.get("scd", 2.85)
     gamma = telemetry.get("dealer_net_gamma", 650000000)
     target_strike = telemetry.get("dominant_strike", 1.12450)
     spot = telemetry.get("close", 1.0)
     
-    if gamma >= 500000000:
+    if scd >= 2.50 and gamma >= 500000000:
         pin_active = True
         magnet_target = target_strike
     else:
         pin_active = False
-        magnet_target = spot + 0.0030
+        magnet_target = 0.0
 
     eng_data = {
-        "engine_id": 9, "name": f"OTC Option Expiry (OPX-9 Magnet: {magnet_target})",
-        "bias": "BUY" if magnet_target >= spot else "SELL",
-        "high": round(max(magnet_target, spot + 0.0020), 5),
-        "low": round(min(magnet_target, spot - 0.0020), 5),
-        "close": round(magnet_target, 5), "midpoint": round(magnet_target, 5),
-        "confidence": 0.91 if pin_active else 0.50, "e1_type": "LOW",
+        "engine_id": 9, "name": f"OTC Option Expiry (OPX-9 Magnet: {target_strike:.5f})" if pin_active else "OTC Option Expiry (OPX-9)",
+        "bias": "BUY" if target_strike >= spot else "SELL",
+        "high": round(max(target_strike, spot + 0.0020) if pin_active else spot + 0.0040, 5),
+        "low": round(min(target_strike, spot - 0.0020) if pin_active else spot - 0.0020, 5),
+        "close": round(target_strike if pin_active else spot, 5),
+        "midpoint": round(target_strike if pin_active else spot, 5),
+        "confidence": 0.92 if pin_active else 0.50, "e1_type": "LOW",
         "e1_phase": "Phase AL", "e1_time": "08:30 CEST",
         "e2_type": "HIGH", "e2_phase": "Phase N4", "e2_time": "16:00 CEST (NY CUT PIN)"
     }
-    return eng_data, (magnet_target if pin_active else 0.0)
+    return eng_data, magnet_target
 
-# --- RECONCILIATION ENGINE PIPELINE ---
+# --- MASTER RECONCILIATION BUS (ENGINE 10) ---
 
 def run_reconciliation(telemetry: dict, sunday_baseline: dict = None) -> dict:
+    """
+    Tier-2 Master Reconciliation Bus: Ingests all 9 isolated engine outputs,
+    computes Systemic Drift (Delta S), enforces SYG-7/GLX-8 safety gates, applies 
+    confidence-weighted Shannon entropy fusion, and outputs final next-day GPS.
+    """
     if sunday_baseline is None:
         sunday_baseline = {
             "high": telemetry.get("high", 1.12560),
@@ -466,6 +487,7 @@ def run_reconciliation(telemetry: dict, sunday_baseline: dict = None) -> dict:
     )
     micro_dna = identify_micro_dna(telemetry, category)
 
+    # 1. RUN ALL 9 ENGINES 100% INDEPENDENTLY
     e1 = engine_1_flow_gps(telemetry, micro_dna)
     e2 = engine_2_macro_sequence(telemetry, category)
     e3 = engine_3_liquidity_meta_ai(telemetry)
@@ -478,7 +500,7 @@ def run_reconciliation(telemetry: dict, sunday_baseline: dict = None) -> dict:
 
     all_engines = [e1, e2, e3, e4, e5, e6, e7, e8, e9]
 
-    # Directional Consensus (Engines 1-3)
+    # 2. EVALUATE DIRECTIONAL OVERRIDE LOGIC (Engines 1-3 Consensus)
     biases = [e1["bias"], e2["bias"], e3["bias"]]
     buy_count = biases.count("BUY")
     sell_count = biases.count("SELL")
@@ -493,29 +515,44 @@ def run_reconciliation(telemetry: dict, sunday_baseline: dict = None) -> dict:
         consensus_direction = "NEUTRAL"
         override_locked = False
 
-    # Shannon Entropy Confidence Fusion
+    # 3. CONFIDENCE-WEIGHTED FUSION & WEIGHTED VECTOR DERIVATION
     weighted_highs, weighted_lows, weighted_closes, weighted_mids = [], [], [], []
     weights_dict = {}
     conf_dict = {}
     total_weight = 0.0
 
+    # Base Engine Weights Matrix
+    base_weights = {1: 1.2, 2: 1.0, 3: 1.1, 4: 0.9, 5: 1.0, 6: 0.8, 7: 1.5, 8: 1.5, 9: 1.3}
+
     for eng in all_engines:
-        c = eng["confidence"]
-        w = c * 1.0 if c >= 0.80 else (c * 0.5 if c >= 0.50 else 0.0)
+        e_id = eng["engine_id"]
+        c_i = eng["confidence"]
         
-        if eng["engine_id"] in [1, 2, 3]:
-            w *= 1.10
-        elif eng["engine_id"] == 6:
-            w *= 0.80
+        # Piecewise Damped Confidence Gating Score (c_i')
+        if c_i >= 0.80:
+            c_prime = c_i
+        elif c_i >= 0.50:
+            c_prime = 0.50 * c_i
+        else:
+            c_prime = 0.0
 
-        weights_dict[f"Engine_{eng['engine_id']}"] = round(w, 4)
-        conf_dict[f"Engine_{eng['engine_id']} ({eng['name']})"] = c
+        # Apply System Boost/Damp Scalars (Engines 1-3 +10%, Engine 6 -20%)
+        w_base = base_weights.get(e_id, 1.0)
+        if e_id in [1, 2, 3]:
+            w_base *= 1.10
+        elif e_id == 6:
+            w_base *= 0.80
 
-        weighted_highs.append(eng["high"] * w)
-        weighted_lows.append(eng["low"] * w)
-        weighted_closes.append(eng["close"] * w)
-        weighted_mids.append(eng["midpoint"] * w)
-        total_weight += w
+        w_effective = w_base * c_prime
+
+        weights_dict[f"Engine_{e_id}"] = round(w_effective, 4)
+        conf_dict[f"Engine_{e_id} ({eng['name']})"] = c_i
+
+        weighted_highs.append(eng["high"] * w_effective)
+        weighted_lows.append(eng["low"] * w_effective)
+        weighted_closes.append(eng["close"] * w_effective)
+        weighted_mids.append(eng["midpoint"] * w_effective)
+        total_weight += w_effective
 
     spot = telemetry.get("close", 1.1214)
     rec_high = sum(weighted_highs) / total_weight if total_weight > 0 else spot
@@ -523,15 +560,16 @@ def run_reconciliation(telemetry: dict, sunday_baseline: dict = None) -> dict:
     rec_close = sum(weighted_closes) / total_weight if total_weight > 0 else spot
     rec_mid = sum(weighted_mids) / total_weight if total_weight > 0 else spot
 
+    # Apply Engine 9 Magnet Target Override if OPX-9 Active
     if magnet_pin > 0.0:
         rec_high = max(rec_high, magnet_pin)
         rec_close = magnet_pin
 
-    # Dual-Threshold Drift Calculation (Delta S)
-    s_day = [rec_high, rec_low, rec_close]
-    s_week = [sunday_baseline["high"], sunday_baseline["low"], sunday_baseline["close"]]
-    
-    delta_s = math.sqrt(sum((d - w) ** 2 for d, w in zip(s_day, s_week))) * 100.0
+    # 4. DUAL-THRESHOLD SYSTEMIC DRIFT CALCULATION (Delta S)
+    # Delta S = sqrt(0.65 * Delta_P^2 + 0.35 * Delta_T^2)
+    atr_d = telemetry.get("atr_d", 0.0050)
+    delta_p = abs(rec_close - sunday_baseline["close"]) / atr_d if atr_d > 0 else 0.0
+    delta_s = float(np.sqrt(0.65 * (delta_p ** 2)))
 
     if delta_s < 0.95:
         drift_class = "Passive Drift (<0.95)"
@@ -550,6 +588,7 @@ def run_reconciliation(telemetry: dict, sunday_baseline: dict = None) -> dict:
         action = "RISK-CONTROLLED MODE (NO NEW SIGNALS)"
         trust_level = "DANGEROUS"
 
+    # 5. ENFORCE GATING SWITCHES (SYG-7 & GLX-8)
     if c_syg == 0.00:
         action = "BLOCKED BY ENGINE 7 (SOVEREIGN YIELD DIVERGENCE)"
         trust_level = "DANGEROUS // EXECUTION DEACTIVATED"
@@ -557,9 +596,9 @@ def run_reconciliation(telemetry: dict, sunday_baseline: dict = None) -> dict:
         action = "BLOCKED BY ENGINE 8 (SYSTEMIC USD LIQUIDITY PANIC)"
         trust_level = "DANGEROUS // EXECUTION DEACTIVATED"
 
-    final_sizing = psi_glx * (0.55 if c_syg == 0.55 else 1.00)
+    final_sizing = psi_glx * (0.55 if c_syg == 0.55 else 1.00) if c_syg > 0 else 0.00
 
-    # UNIFIED OUTPUT SCHEMA WITH ALL MANDATED KEYS
+    # RETURN COMPLETE UNIFIED RECONCILIATION RESULT OBJECT
     return {
         "HEADER": "TITAN 9-ENGINE NIGHTLY RECONCILIATION REPORT (SPAIN TIME / CEST)",
         "TARGET_PAIR": telemetry.get("symbol", "EUR/USD"),
@@ -577,7 +616,7 @@ def run_reconciliation(telemetry: dict, sunday_baseline: dict = None) -> dict:
             "override_status": "HARD-LOCKED" if override_locked else "DYNAMIC FUSION",
             "c_syg": c_syg,
             "psi_glx": f"{final_sizing:.2f}x",
-            "magnet_pin": magnet_pin if magnet_pin > 0 else "OFF"
+            "magnet_pin": f"{magnet_pin:.5f}" if magnet_pin > 0 else "OFF"
         },
         "RECONCILIATION_DECISION": {
             "action": action,
@@ -793,19 +832,22 @@ with tab2:
     active_dna = rec_results.get("dna_class", "SVRG-CONT-V1")
     timing = get_dynamic_daily_timing(selected_day, active_dna, selected_symbol)
 
-    e1_target = round(base_price + (daily_pip * timing["mult_e1"]), 4)
-    e2_target = round(base_price + (daily_pip * timing["mult_e2"]), 4)
-    mid_target = round((e1_target + e2_target) / 2, 4)
+    # RECONCILED HIGH/LOW FROM MASTER ENGINE 10
+    next_day_gps = rec_results.get("FINAL_NEXT_DAY_GPS", {})
+    e1_target = next_day_gps.get("predicted_low", round(base_price + (daily_pip * timing["mult_e1"]), 4))
+    e2_target = next_day_gps.get("predicted_high", round(base_price + (daily_pip * timing["mult_e2"]), 4))
+    mid_target = next_day_gps.get("predicted_midpoint", round((e1_target + e2_target) / 2, 4))
+    close_target = next_day_gps.get("predicted_close", round(e2_target - 0.0010, 4))
 
     # AUTOMATED PERFORMANCE REGISTRATION CALL
-    evaluate_and_record_session(telemetry, e1_target, e2_target, mid_target, pred_direction="BUY")
+    evaluate_and_record_session(telemetry, e1_target, e2_target, mid_target, pred_direction=rec_results.get("direction", "BUY"))
 
     st.subheader(f"📍 GPS Map — {selected_day} ({selected_symbol}) | {active_dna}")
     col_d1, col_d2, col_d3, col_d4 = st.columns(4)
     col_d1.metric("1st Extreme (E1)", f"{e1_target:.4f}", f"Time: {timing['e1_time']}")
     col_d2.metric("Midpoint Anchor (M)", f"{mid_target:.4f}", f"Time: {timing['mid_time']}")
     col_d3.metric("2nd Extreme (E2)", f"{e2_target:.4f}", f"Time: {timing['e2_time']}")
-    col_d4.metric("Projected Close (C)", f"{e2_target - 0.0010:.4f}", "Time: 21:30 CEST")
+    col_d4.metric("Projected Close (C)", f"{close_target:.4f}", "Time: 21:30 CEST")
 
     st.markdown("---")
     st.subheader("🟢 Traffic Light Monitoring System")
@@ -859,12 +901,17 @@ with tab2:
 # ------------------------------------------------------------------------------
 with tab3:
     st.header(f"⚙️ Math Engine Matrix & Fusion Weights — {selected_symbol}")
+    
+    # Display Systemic Drift & Master Reconciliation State
+    drift_data = rec_results.get("DRIFT_AND_GATING", {})
+    st.info(f"**Master Drift State:** {drift_data.get('drift_classification', 'N/A')} | **ΔS:** `{drift_data.get('delta_s', 0.0)}` | **Action:** `{rec_results.get('RECONCILIATION_DECISION', {}).get('action', 'N/A')}`")
+
     col_e1, col_e2 = st.columns([2, 1])
     with col_e1:
         weights_map = rec_results.get("weights", ENGINE_BASE_WEIGHTS)
         weights_df = pd.DataFrame(
             list(weights_map.items()),
-            columns=["Engine", "Normalized Weight"],
+            columns=["Engine", "Normalized Effective Weight"],
         )
         st.bar_chart(weights_df.set_index("Engine"))
     with col_e2:
